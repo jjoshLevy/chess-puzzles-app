@@ -1,0 +1,11 @@
+{
+  "name": "chess-puzzles-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
