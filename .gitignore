@@ -1,8 +1,17 @@
 # Dependencies
-node_modules/
+/node_modules
+/client/node_modules
+/server/node_modules
 
-# Compiled output
-dist/
+# Build output
+/dist
+/client/dist
+/server/dist
+
+# Logs
+*.log
 
 # Environment variables
 .env
+.env.local
+```4.  **Save the `.gitignore` file.**
