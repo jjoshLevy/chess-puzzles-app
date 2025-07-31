@@ -1,23 +1,4 @@
-// Chess piece Unicode symbols - filled symbols for both colors
-export const CHESS_PIECES = {
-  white: {
-    king: '♚',
-    queen: '♛',
-    rook: '♜',
-    bishop: '♝',
-    knight: '♞',
-    pawn: '♟︎'
-  },
-  black: {
-    king: '♚',
-    queen: '♛',
-    rook: '♜',
-    bishop: '♝',
-    knight: '♞',
-    pawn: '♟︎'
-  }
-};
-
+// This file contains all the core chess logic for the application.
 export type PieceType = 'king' | 'queen' | 'rook' | 'bishop' | 'knight' | 'pawn';
 export type PieceColor = 'white' | 'black';
 
@@ -26,297 +7,166 @@ export interface ChessPiece {
   color: PieceColor;
 }
 
-export interface ChessMove {
-  from: string;
-  to: string;
-  piece: ChessPiece;
-  captured?: ChessPiece;
-  promotion?: PieceType;
-}
+const pieceTypeMap: { [key: string]: PieceType } = {
+  k: 'king', q: 'queen', r: 'rook',
+  b: 'bishop', n: 'knight', p: 'pawn'
+};
 
-// Convert FEN notation to board position
 export function fenToBoard(fen: string): (ChessPiece | null)[][] {
   const board: (ChessPiece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
-  
-  if (!fen || typeof fen !== 'string') {
-    return board;
-  }
-  
-  const position = fen.split(' ')[0];
-  const rows = position.split('/');
-
-  // Ensure we have exactly 8 rows
-  if (rows.length !== 8) {
-    return board;
-  }
-
-  for (let rank = 0; rank < 8; rank++) {
-    const row = rows[rank];
-    if (!row || typeof row !== 'string') {
-      continue;
-    }
-    
-    let file = 0;
-    for (const char of row) {
-      if (char >= '1' && char <= '8') {
-        file += parseInt(char);
-      } else {
-        const piece = fenCharToPiece(char);
-        if (piece && file < 8) {
-          board[rank][file] = piece;
-        }
-        file++;
-      }
-      
-      // Prevent array overflow
-      if (file >= 8) break;
+  const fenParts = fen.split(' ');
+  const position = fenParts[0];
+  let rank = 0, file = 0;
+  for (const char of position) {
+    if (char === '/') { rank++; file = 0; }
+    else if (/\d/.test(char)) { file += parseInt(char, 10); }
+    else {
+      const color = char === char.toUpperCase() ? 'white' : 'black';
+      const type = char.toLowerCase() as keyof typeof pieceTypeMap;
+      board[rank][file] = { type: pieceTypeMap[type], color };
+      file++;
     }
   }
-
   return board;
 }
 
-function fenCharToPiece(char: string): ChessPiece | null {
-  const pieceMap: { [key: string]: ChessPiece } = {
-    'K': { type: 'king', color: 'white' },
-    'Q': { type: 'queen', color: 'white' },
-    'R': { type: 'rook', color: 'white' },
-    'B': { type: 'bishop', color: 'white' },
-    'N': { type: 'knight', color: 'white' },
-    'P': { type: 'pawn', color: 'white' },
-    'k': { type: 'king', color: 'black' },
-    'q': { type: 'queen', color: 'black' },
-    'r': { type: 'rook', color: 'black' },
-    'b': { type: 'bishop', color: 'black' },
-    'n': { type: 'knight', color: 'black' },
-    'p': { type: 'pawn', color: 'black' },
-  };
-
-  return pieceMap[char] || null;
-}
-
-// Convert square notation to array indices
 export function squareToIndices(square: string): [number, number] {
   const file = square.charCodeAt(0) - 'a'.charCodeAt(0);
-  const rank = 8 - parseInt(square[1]);
+  const rank = 8 - parseInt(square.charAt(1), 10);
   return [rank, file];
 }
 
-// Convert array indices to square notation
 export function indicesToSquare(rank: number, file: number): string {
-  const fileChar = String.fromCharCode('a'.charCodeAt(0) + file);
-  const rankNum = 8 - rank;
-  return `${fileChar}${rankNum}`;
+  return `${String.fromCharCode('a'.charCodeAt(0) + file)}${8 - rank}`;
 }
 
-// Get piece symbol for display
-export function getPieceSymbol(piece: ChessPiece): string {
-  return CHESS_PIECES[piece.color][piece.type];
-}
-
-// Check if square is light or dark
 export function isLightSquare(rank: number, file: number): boolean {
-  return (rank + file) % 2 === 0;
+  return (rank + file) % 2 !== 0;
 }
 
-// Generate all possible moves for a piece at a given square
-export function getPossibleMoves(
-  board: (ChessPiece | null)[][],
-  fromSquare: string
-): string[] {
-  const [fromRank, fromFile] = squareToIndices(fromSquare);
-  const piece = board[fromRank][fromFile];
-  
-  if (!piece) return [];
-
-  const moves: string[] = [];
-
-  switch (piece.type) {
-    case 'pawn':
-      moves.push(...getPawnMoves(board, fromRank, fromFile, piece.color));
-      break;
-    case 'rook':
-      moves.push(...getRookMoves(board, fromRank, fromFile, piece.color));
-      break;
-    case 'bishop':
-      moves.push(...getBishopMoves(board, fromRank, fromFile, piece.color));
-      break;
-    case 'queen':
-      moves.push(...getQueenMoves(board, fromRank, fromFile, piece.color));
-      break;
-    case 'king':
-      moves.push(...getKingMoves(board, fromRank, fromFile, piece.color));
-      break;
-    case 'knight':
-      moves.push(...getKnightMoves(board, fromRank, fromFile, piece.color));
-      break;
-  }
-
-  return moves;
+export function getPieceSymbol(piece: ChessPiece): string {
+  const symbols: { [key in PieceColor]: { [key in PieceType]: string } } = {
+    white: { king: '♔', queen: '♕', rook: '♖', bishop: '♗', knight: '♘', pawn: '♙' },
+    black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟︎' }
+  };
+  return symbols[piece.color][piece.type];
 }
 
-function getPawnMoves(board: (ChessPiece | null)[][], rank: number, file: number, color: PieceColor): string[] {
-  const moves: string[] = [];
-  const direction = color === 'white' ? -1 : 1;
-  const startRank = color === 'white' ? 6 : 1;
-
-  // Forward move
-  const newRank = rank + direction;
-  if (newRank >= 0 && newRank < 8 && !board[newRank][file]) {
-    moves.push(indicesToSquare(newRank, file));
-    
-    // Double move from starting position
-    if (rank === startRank && !board[newRank + direction][file]) {
-      moves.push(indicesToSquare(newRank + direction, file));
-    }
-  }
-
-  // Captures
-  for (const captureFile of [file - 1, file + 1]) {
-    if (captureFile >= 0 && captureFile < 8 && newRank >= 0 && newRank < 8) {
-      const targetPiece = board[newRank][captureFile];
-      if (targetPiece && targetPiece.color !== color) {
-        moves.push(indicesToSquare(newRank, captureFile));
-      }
-    }
-  }
-
-  return moves;
-}
-
-function getRookMoves(board: (ChessPiece | null)[][], rank: number, file: number, color: PieceColor): string[] {
-  const moves: string[] = [];
-  const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-
-  for (const [dRank, dFile] of directions) {
-    for (let i = 1; i < 8; i++) {
-      const newRank = rank + dRank * i;
-      const newFile = file + dFile * i;
-
-      if (newRank < 0 || newRank >= 8 || newFile < 0 || newFile >= 8) break;
-
-      const targetPiece = board[newRank][newFile];
-      if (!targetPiece) {
-        moves.push(indicesToSquare(newRank, newFile));
-      } else {
-        if (targetPiece.color !== color) {
-          moves.push(indicesToSquare(newRank, newFile));
-        }
-        break;
-      }
-    }
-  }
-
-  return moves;
-}
-
-function getBishopMoves(board: (ChessPiece | null)[][], rank: number, file: number, color: PieceColor): string[] {
-  const moves: string[] = [];
-  const directions = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
-
-  for (const [dRank, dFile] of directions) {
-    for (let i = 1; i < 8; i++) {
-      const newRank = rank + dRank * i;
-      const newFile = file + dFile * i;
-
-      if (newRank < 0 || newRank >= 8 || newFile < 0 || newFile >= 8) break;
-
-      const targetPiece = board[newRank][newFile];
-      if (!targetPiece) {
-        moves.push(indicesToSquare(newRank, newFile));
-      } else {
-        if (targetPiece.color !== color) {
-          moves.push(indicesToSquare(newRank, newFile));
-        }
-        break;
-      }
-    }
-  }
-
-  return moves;
-}
-
-function getQueenMoves(board: (ChessPiece | null)[][], rank: number, file: number, color: PieceColor): string[] {
-  return [
-    ...getRookMoves(board, rank, file, color),
-    ...getBishopMoves(board, rank, file, color)
-  ];
-}
-
-function getKingMoves(board: (ChessPiece | null)[][], rank: number, file: number, color: PieceColor): string[] {
-  const moves: string[] = [];
-  const directions = [
-    [-1, -1], [-1, 0], [-1, 1],
-    [0, -1],           [0, 1],
-    [1, -1],  [1, 0],  [1, 1]
-  ];
-
-  for (const [dRank, dFile] of directions) {
-    const newRank = rank + dRank;
-    const newFile = file + dFile;
-
-    if (newRank >= 0 && newRank < 8 && newFile >= 0 && newFile < 8) {
-      const targetPiece = board[newRank][newFile];
-      if (!targetPiece || targetPiece.color !== color) {
-        moves.push(indicesToSquare(newRank, newFile));
-      }
-    }
-  }
-
-  return moves;
-}
-
-function getKnightMoves(board: (ChessPiece | null)[][], rank: number, file: number, color: PieceColor): string[] {
-  const moves: string[] = [];
-  const knightMoves = [
-    [-2, -1], [-2, 1], [-1, -2], [-1, 2],
-    [1, -2], [1, 2], [2, -1], [2, 1]
-  ];
-
-  for (const [dRank, dFile] of knightMoves) {
-    const newRank = rank + dRank;
-    const newFile = file + dFile;
-
-    if (newRank >= 0 && newRank < 8 && newFile >= 0 && newFile < 8) {
-      const targetPiece = board[newRank][newFile];
-      if (!targetPiece || targetPiece.color !== color) {
-        moves.push(indicesToSquare(newRank, newFile));
-      }
-    }
-  }
-
-  return moves;
-}
-
-// Basic move validation (simplified)
-export function isValidMove(
-  board: (ChessPiece | null)[][],
-  from: string,
-  to: string
-): boolean {
-  const possibleMoves = getPossibleMoves(board, from);
-  return possibleMoves.includes(to);
-}
-
-// Format time in mm:ss format
-export function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-// Get difficulty stars
-export function getDifficultyStars(difficulty: string): string {
-  switch (difficulty) {
-    case 'beginner': return '★☆☆';
-    case 'intermediate': return '★★☆';
-    case 'advanced': return '★★★';
-    default: return '★☆☆';
-  }
-}
-
-// Check if it's Black's turn to move based on FEN
 export function isBlackToMove(fen: string): boolean {
-  const fenParts = fen.split(' ');
-  return fenParts.length > 1 && fenParts[1] === 'b';
+    return fen.split(' ')[1] === 'b';
+}
+
+function isSquareAttacked(board: (ChessPiece | null)[][], rank: number, file: number, attackerColor: PieceColor): boolean {
+    const opponentColor = attackerColor === 'white' ? 'black' : 'white';
+    const pawnDirection = attackerColor === 'white' ? 1 : -1;
+    if (rank + pawnDirection >= 0 && rank + pawnDirection < 8) {
+      if (file - 1 >= 0) { const p = board[rank + pawnDirection][file - 1]; if (p && p.type === 'pawn' && p.color === attackerColor) return true; }
+      if (file + 1 < 8) { const p = board[rank + pawnDirection][file + 1]; if (p && p.type === 'pawn' && p.color === attackerColor) return true; }
+    }
+    const knightMoves = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]];
+    for (const [dr, df] of knightMoves) {
+      const r = rank + dr, f = file + df;
+      if (r >= 0 && r < 8 && f >= 0 && f < 8) { const p = board[r][f]; if (p && p.type === 'knight' && p.color === attackerColor) return true; }
+    }
+    const directions = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]];
+    for (let i = 0; i < directions.length; i++) {
+        for (let dist = 1; dist < 8; dist++) {
+            const r = rank + directions[i][0] * dist, f = file + directions[i][1] * dist;
+            if (r < 0 || r >= 8 || f < 0 || f >= 8) break;
+            const p = board[r][f];
+            if (p) {
+                if (p.color === attackerColor) {
+                    if ((p.type === 'rook' && i < 4) || (p.type === 'bishop' && i >= 4) || p.type === 'queen' || (p.type === 'king' && dist === 1)) return true;
+                }
+                if (p.color !== attackerColor) break;
+            }
+        }
+    }
+    return false;
+}
+
+export function getPossibleMoves(fen: string, fromSquare: string): string[] {
+    const board = fenToBoard(fen);
+    const [rank, file] = squareToIndices(fromSquare);
+    const piece = board[rank][file];
+    if (!piece) return [];
+    
+    let pseudoLegalMoves: string[] = [];
+    const color = piece.color;
+    const opponentColor = color === 'white' ? 'black' : 'white';
+
+    const addSlidingMoves = (directions: number[][]) => {
+      for (const [dr, df] of directions) {
+        for (let i = 1; i < 8; i++) {
+          const r = rank + i * dr, f = file + i * df;
+          if (r < 0 || r >= 8 || f < 0 || f >= 8) break;
+          const targetPiece = board[r][f];
+          if (targetPiece) {
+            if (targetPiece.color !== color) pseudoLegalMoves.push(indicesToSquare(r, f));
+            break;
+          }
+          pseudoLegalMoves.push(indicesToSquare(r, f));
+        }
+      }
+    };
+    
+    switch(piece.type) {
+        case 'pawn':
+            const dir = color === 'white' ? -1 : 1;
+            const startRank = color === 'white' ? 6 : 1;
+            if (rank + dir >= 0 && rank + dir < 8 && !board[rank + dir][file]) {
+                pseudoLegalMoves.push(indicesToSquare(rank + dir, file));
+                if (rank === startRank && !board[rank + 2 * dir][file]) {
+                    pseudoLegalMoves.push(indicesToSquare(rank + 2 * dir, file));
+                }
+            }
+            [-1, 1].forEach(fileOffset => {
+                if (file + fileOffset >= 0 && file + fileOffset < 8 && rank + dir >= 0 && rank + dir < 8) {
+                    const target = board[rank + dir][file + fileOffset];
+                    if (target && target.color === opponentColor) {
+                        pseudoLegalMoves.push(indicesToSquare(rank + dir, file + fileOffset));
+                    }
+                }
+            });
+            break;
+        case 'knight':
+            [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]].forEach(([dr, df]) => {
+                const r = rank + dr, f = file + df;
+                if (r >= 0 && r < 8 && f >= 0 && f < 8) {
+                    if (!board[r][f] || board[r][f]?.color !== color) pseudoLegalMoves.push(indicesToSquare(r, f));
+                }
+            });
+            break;
+        case 'bishop': addSlidingMoves([[-1, -1], [-1, 1], [1, -1], [1, 1]]); break;
+        case 'rook': addSlidingMoves([[-1, 0], [1, 0], [0, -1], [0, 1]]); break;
+        case 'queen': addSlidingMoves([[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]]); break;
+        case 'king':
+            [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]].forEach(([dr, df]) => {
+                const r = rank + dr, f = file + df;
+                if (r >= 0 && r < 8 && f >= 0 && f < 8) {
+                    if (!board[r][f] || board[r][f]?.color !== color) pseudoLegalMoves.push(indicesToSquare(r, f));
+                }
+            });
+            break;
+    }
+
+    const legalMoves = pseudoLegalMoves.filter(toSquare => {
+        const [toRank, toFile] = squareToIndices(toSquare);
+        const tempBoard = JSON.parse(JSON.stringify(board));
+        tempBoard[toRank][toFile] = piece;
+        tempBoard[rank][file] = null;
+        let kingRank = -1, kingFile = -1;
+        for (let r = 0; r < 8; r++) {
+            for (let f = 0; f < 8; f++) {
+                const p = tempBoard[r][f];
+                if (p && p.type === 'king' && p.color === color) {
+                    kingRank = r; kingFile = f; break;
+                }
+            }
+            if (kingRank !== -1) break;
+        }
+        return !isSquareAttacked(tempBoard, kingRank, kingFile, opponentColor);
+    });
+
+    return legalMoves;
 }
