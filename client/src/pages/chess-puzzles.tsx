@@ -94,7 +94,7 @@ export default function ChessPuzzles() {
   const [isAtStartPosition, setIsAtStartPosition] = useState(false);
   const [lastMoveWasIncorrect, setLastMoveWasIncorrect] = useState(false);
   const [filters, setFilters] = useState<Filters>({ difficulties: [], themes: [] });
-  const [puzzleCounter, setPuzzleCounter] = useState(1); // FIX: Initialize at 1
+  const [puzzleCounter, setPuzzleCounter] = useState(1);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -225,23 +225,44 @@ export default function ChessPuzzles() {
     setHighlightedSquares([opponentFrom, opponentTo]);
     setIsAtStartPosition(false);
   };
+  
+  const handleHint = () => {
+    if (!puzzle || gameState.isComplete) return;
+    const solutionMoves = puzzle.moves.split(' ');
+    const nextPlayerMove = solutionMoves[gameState.moves.length];
+    if (!nextPlayerMove) return;
+    const fromSquare = nextPlayerMove.substring(0, 2);
+    setHighlightedSquares([fromSquare]);
+    setHintArrows([]);
+    toast({ title: "Hint", description: `Try moving the piece from ${fromSquare.toUpperCase()}` });
+  };
 
-  const handleHint = () => { /* ... same as before ... */ };
-  const handleShowSolution = () => { /* ... same as before ... */ };
+  const handleShowSolution = () => {
+    if (!puzzle || gameState.isComplete) return;
+    const solutionMoves = puzzle.moves.split(' ');
+    const nextPlayerMove = solutionMoves[gameState.moves.length];
+    if (!nextPlayerMove) return;
+    const fromSquare = nextPlayerMove.substring(0, 2);
+    const toSquare = nextPlayerMove.substring(2, 4);
+    setHighlightedSquares([fromSquare, toSquare]);
+    setHintArrows([]);
+    toast({ title: "Solution", description: `The correct move is ${fromSquare.toUpperCase()} to ${toSquare.toUpperCase()}` });
+  };
+
   const handleReset = () => { if (puzzle) { startPuzzle(puzzle); } };
   
   const handleNextPuzzle = () => {
-    setPuzzleCounter(prev => prev + 1); // FIX: Increment counter BEFORE fetching
+    setPuzzleCounter(prev => prev + 1);
     queryClient.invalidateQueries({ queryKey: ['puzzle', filters] });
   };
   
   const handlePreviousPuzzle = () => {
-    setPuzzleCounter(prev => prev > 1 ? prev - 1 : 1); // Go back, but not below 1
-    queryClient.invalidateQueries({ queryKey: ['puzzle', filters] }); // Still gets a new random one
+    setPuzzleCounter(prev => prev > 1 ? prev - 1 : 1);
+    queryClient.invalidateQueries({ queryKey: ['puzzle', filters] });
   };
 
   const handleFiltersApply = (newFilters: Filters) => {
-    setPuzzleCounter(1); // Reset counter to 1 for new filter set
+    setPuzzleCounter(1);
     setFilters(newFilters);
   };
 
