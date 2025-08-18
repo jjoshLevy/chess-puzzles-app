@@ -235,7 +235,6 @@ export default function ChessPuzzles() {
   const handlePreviousPuzzle = () => { setPuzzleCounter(prev => prev > 1 ? prev - 1 : 1); };
   const handleFiltersApply = (newFilters: Filters) => { setPuzzleCounter(1); setFilters(newFilters); };
 
-  // --- THIS IS THE FIX: The illegal comments have been replaced with the real UI ---
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -269,7 +268,6 @@ export default function ChessPuzzles() {
       </div>
     );
   }
-  // ---------------------------------------------------------------------------------
   
   if (!puzzle || !puzzle.FEN || !puzzle.Moves) {
     return (
@@ -304,6 +302,32 @@ export default function ChessPuzzles() {
               onNext={handleNextPuzzle}
               onBookmark={() => toast({ title: "Bookmarked!" })}
             />
+            {/* Feedback message moved ABOVE the puzzle board */}
+            <div className="mt-6">
+              <Alert
+                className={cn(
+                  "flex items-center gap-3 px-6 py-4 rounded-lg shadow-lg border-2 text-lg font-semibold transition-all duration-200",
+                  gameState.feedback?.type === "success"
+                    ? "bg-green-100 border-green-500 text-green-900"
+                    : gameState.feedback?.type === "error"
+                    ? "bg-red-100 border-red-500 text-red-900"
+                    : "bg-yellow-100 border-yellow-500 text-yellow-900"
+                )}
+              >
+                {gameState.feedback?.type === "success" && (
+                  <span role="img" aria-label="Success" className="text-2xl">✅</span>
+                )}
+                {gameState.feedback?.type === "error" && (
+                  <span role="img" aria-label="Error" className="text-2xl">❌</span>
+                )}
+                {gameState.feedback?.type === "hint" && (
+                  <span role="img" aria-label="Hint" className="text-2xl">💡</span>
+                )}
+                <AlertDescription>
+                  {gameState.feedback?.message || `Ready to solve: Make your move!`}
+                </AlertDescription>
+              </Alert>
+            </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <BoardWrapper onPrevious={handlePreviousPuzzle} onNext={handleNextPuzzle}>
                 <ChessBoard
@@ -336,11 +360,6 @@ export default function ChessPuzzles() {
                 </div>
               </div>
             )}
-            <div className="mt-6">
-              <Alert className={`${ gameState.feedback?.type === 'success' ? 'bg-green-50' : gameState.feedback?.type === 'error' ? 'bg-red-50' : 'bg-gray-50' }`}>
-                <AlertDescription>{gameState.feedback?.message || `Ready to solve: Make your move!`}</AlertDescription>
-              </Alert>
-            </div>
           </div>
           <div className="lg:col-span-1">
             <PuzzleSidebar onFiltersApply={handleFiltersApply} />
