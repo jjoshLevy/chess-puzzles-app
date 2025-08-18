@@ -1,71 +1,70 @@
+import { db } from '../db';
 import fs from 'fs';
 import path from 'path';
-import csv from 'csv-parser';
-import { db } from '../db';
-import { puzzles } from '../db/schema';
+import Papa from 'papaparse';
 import { fileURLToPath } from 'url';
+
+console.log('🚀 Starting Final, Paranoid Seed Script...');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const seedDatabase = async () => {
-  console.log('🌱 [ULTIMATE DIAGNOSTIC] Starting seed process...');
+const csvFilePath = path.resolve(__dirname, '../data/puzzles.csv');
+console.log(`📖 Reading original CSV file from: ${csvFilePath}`);
 
-  const results: any[] = [];
-  const csvFilePath = path.resolve(__dirname, '..', '..', 'Book(Sheet1).csv');
+const csvFile = fs.readFileSync(csvFilePath, 'utf8');
 
-  console.log(`📖 Reading CSV file from: ${csvFilePath}`);
+Papa.parse(csvFile, {
+    header: true,
+    skipEmptyLines: true,
+    complete: (results) => {
+        const allPuzzles = results.data as any[];
+        console.log(`✅ Raw CSV file successfully processed. Found ${allPuzzles.length} total rows.`);
 
-  fs.createReadStream(csvFilePath)
-    .pipe(csv({ mapHeaders: ({ header }) => header.trim() }))
-    .on('data', (data) => results.push(data))
-    .on('end', async () => {
-      console.log(`✅ CSV file successfully processed. Found ${results.length} rows.`);
-      
-      if (results.length === 0) {
-          console.log('No data to insert. Exiting.');
-          return;
-      }
+        // --- THIS IS THE FINAL FIX ---
+        // Explicitly filter out any row that is actually the header row.
+        const noHeaderPuzzles = allPuzzles.filter(p => p.PuzzleId !== 'PuzzleId');
+        console.log(`👍 Filtered out the fake header row. Now have ${noHeaderPuzzles.length} puzzles.`);
+        // -----------------------------
 
-      try {
-        console.log('🗑️  Attempting to delete all existing puzzles...');
-        await db.delete(puzzles);
-        console.log('✅ Existing puzzles deleted successfully.');
-      } catch (error) {
-        console.error('❌ FAILED TO DELETE PUZZLES. THIS IS THE ERROR:', error);
-        return; // Stop if we can't delete
-      }
+        // Now, deduplicate the remaining puzzles
+        const seenIds = new Set<string>();
+        const uniquePuzzles = noHeaderPuzzles.filter(p => {
+            if (!p.PuzzleId) return false;
+            const isDuplicate = seenIds.has(p.PuzzleId);
+            if (!isDuplicate) seenIds.add(p.PuzzleId);
+            return !isDuplicate;
+        });
+        console.log(`👍 Deduplication complete. Found ${uniquePuzzles.length} unique puzzles.`);
 
-      const safeParseInt = (value: string) => {
-          const parsed = parseInt(value, 10);
-          return isNaN(parsed) ? 0 : parsed;
-      };
-      
-      const formattedPuzzles = results.map(row => ({
-          puzzleId: row.puzzle || 'N/A',
-          fen: row.FEN || '',
-          moves: row.move || '',
-          rating: safeParseInt(row.rating),
-          ratingDeviation: safeParseInt(row.ratingDEV),
-          popularity: safeParseInt(row.popularity),
-          nbPlays: safeParseInt(row['NB plays']),
-          themes: row.themes || '',
-          gameUrl: row.url || '',
-          openingTags: row.OpeningTags || ''
-      }));
+        // Final validation step from before
+        const REQUIRED_HEADERS = ['PuzzleId', 'FEN', 'Moves', 'Rating', 'Themes'];
+        const validPuzzles = uniquePuzzles.filter(puzzle => {
+            for (const header of REQUIRED_HEADERS) {
+                if (puzzle[header] === undefined || puzzle[header] === null) return false;
+            }
+            return true;
+        });
+        console.log(`🗑️  Validation complete. Found and skipped ${uniquePuzzles.length - validPuzzles.length} corrupted row(s).`);
+        
+        // Now, insert the final, clean data
+        try {
+            db.exec('DELETE FROM Puzzle');
+            console.log(`🚀 Inserting ${validPuzzles.length} fully validated puzzles...`);
 
-      console.log('📦 Attempting to insert 100 puzzles. First puzzle object:', formattedPuzzles[0]);
+            const insert = db.prepare(
+                'INSERT INTO Puzzle (PuzzleId, FEN, Moves, Rating, RatingDeviation, Popularity, NbPlays, Themes, GameUrl, OpeningTags) VALUES (@PuzzleId, @FEN, @Moves, @Rating, @RatingDeviation, @Popularity, @NbPlays, @Themes, @GameUrl, @OpeningTags)'
+            );
+            const insertMany = db.transaction((puzzles) => {
+                for (const puzzle of puzzles) insert.run(puzzle);
+            });
 
-      try {
-        await db.insert(puzzles).values(formattedPuzzles);
-        console.log('🎉🎉🎉 SUCCESS! Data was inserted into the database! 🎉🎉🎉');
-      } catch (error) {
-        console.error('❌❌❌ THE INSERTION FAILED. THIS IS THE REAL DATABASE ERROR: ❌❌❌');
-        console.error(error);
-      }
-      
-      console.log('Script has finished.');
-    });
-};
+            insertMany(validPuzzles);
+            console.log('🏆🏆🏆 SUCCESS! The database is now clean and correctly populated!');
 
-seedDatabase();
+        } catch (err: any) {
+            console.error(`❌ DATABASE ERROR DURING FINAL INSERT: ${err.message}`);
+            process.exit(1);
+        }
+    }
+});

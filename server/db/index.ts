@@ -1,12 +1,13 @@
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
-import * as schema from './schema';
-import * as dotenv from 'dotenv';
+import Database from 'better-sqlite3';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// This loads your .env.local file to get the database URL
-dotenv.config({ path: '.env.local' });
+// Get the directory name using the modern import.meta.url method
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const sql = neon(process.env.POSTGRES_URL!);
+// Build the absolute path to the database file
+const dbFilePath = path.join(__dirname, 'db.sqlite');
 
-// This creates the 'db' object that your application will use to talk to the database
-export const db = drizzle(sql, { schema });
+// This forces the app to use the local db.sqlite file
+export const db = new Database(dbFilePath);

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Bookmark, Star } from "lucide-react";
 
+// Define the shape of the puzzle data this component expects
 interface Puzzle {
   puzzleId: string;
   rating: number;
@@ -10,8 +11,6 @@ interface Puzzle {
 interface PuzzleInfoProps {
   puzzle: Puzzle;
   puzzleNumber: number;
-  onPrevious: () => void;
-  onNext: () => void;
   onBookmark: () => void;
 }
 
@@ -22,6 +21,20 @@ const getDifficultyStars = (rating: number) => {
 };
 
 export function PuzzleInfo({ puzzle, puzzleNumber, onBookmark }: PuzzleInfoProps) {
+  // --- THIS IS THE FINAL FIX ---
+  // If the puzzle data has not loaded yet, we render a simple placeholder.
+  // This prevents the application from crashing when it tries to read 'puzzle.rating' or 'puzzle.themes'
+  // before the data has arrived from the server.
+  if (!puzzle) {
+    return (
+      <div className="mb-4 p-4 text-center">
+        <div className="text-sm text-gray-500">Loading puzzle info...</div>
+      </div>
+    );
+  }
+  // -----------------------------
+
+  // If we get past the check above, we know 'puzzle' is a valid object.
   const starCount = getDifficultyStars(puzzle.rating);
 
   return (
@@ -48,7 +61,8 @@ export function PuzzleInfo({ puzzle, puzzleNumber, onBookmark }: PuzzleInfoProps
         <span>({puzzle.rating})</span>
       </div>
       <div className="mt-2 text-xs text-gray-500 capitalize">
-        Themes: {puzzle.themes.replace(/_/g, ' ')}
+        {/* We also add a safety check here in case themes is unexpectedly missing */}
+        Themes: {(puzzle.themes || 'N/A').replace(/_/g, ' ')}
       </div>
     </div>
   );

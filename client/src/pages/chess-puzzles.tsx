@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeft, ArrowRight, Lightbulb, Eye, RotateCcw, Undo } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { ChessBoard } from "@/components/chess-board";
-import { BoardWrapper } from "@/components/board-wrapper";
+import { BoardWrapper } from "@/components/BoardWrapper";
 import { PuzzleInfo } from "@/components/puzzle-info";
 import { PuzzleSidebar, type Filters } from "@/components/puzzle-sidebar";
 import { useToast } from "@/hooks/use-toast";
@@ -14,39 +14,16 @@ import { fenToBoard, squareToIndices, isBlackToMove, getPossibleMoves, type Ches
 import { cn } from "@/lib/utils";
 import type { Puzzle as PuzzleSchema } from "@shared/schema";
 
-// --- BoardWrapper COMPONENT IS NOW IN THIS FILE ---
-interface BoardWrapperProps {
-  children: React.ReactNode;
-  onPrevious: () => void;
-  onNext: () => void;
-}
-function BoardWrapper({ children, onPrevious, onNext }: BoardWrapperProps) {
-  return (
-    <div className="relative w-full max-w-lg mx-auto">
-      {children}
-      <Button
-        variant="ghost" size="icon" onClick={onPrevious}
-        className="absolute top-1/2 -left-4 md:-left-16 transform -translate-y-1/2 h-12 w-12 md:h-16 md:w-16 rounded-full bg-gray-900/10 hover:bg-blue-500 hover:scale-110 transition-all duration-200 z-10 text-white hover:text-white"
-        aria-label="Previous Puzzle"
-      >
-        <ArrowLeft className="h-6 w-6 md:h-8 md:w-8" />
-      </Button>
-      <Button
-        variant="ghost" size="icon" onClick={onNext}
-        className="absolute top-1/2 -right-4 md:-right-16 transform -translate-y-1/2 h-12 w-12 md:h-16 md:w-16 rounded-full bg-gray-900/10 hover:bg-blue-500 hover:scale-110 transition-all duration-200 z-10 text-white hover:text-white"
-        aria-label="Next Puzzle"
-      >
-        <ArrowRight className="h-6 w-6 md:h-8 md:w-8" />
-      </Button>
-    </div>
-  );
-}
-// ---------------------------------------------
-
-interface Puzzle extends PuzzleSchema {
-    id: number;
-    puzzleId: string;
-    moves: string;
+interface Puzzle {
+  id: number;
+  PuzzleId: string;
+  FEN: string;
+  Moves: string;
+  Rating: number;
+  Themes: string;
+  puzzleId?: string;
+  rating?: number;
+  themes?: string;
 }
 
 function updateFenWithMove(fen: string, from: string, to: string): string {
@@ -100,7 +77,7 @@ export default function ChessPuzzles() {
   const queryClient = useQueryClient();
 
   const { data: puzzle, isLoading, isError } = useQuery<Puzzle>({
-    queryKey: ['puzzle', filters],
+    queryKey: ['puzzle', filters, puzzleCounter],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.difficulties.length > 0) { params.append('difficulties', filters.difficulties.join(',')); }
@@ -118,7 +95,7 @@ export default function ChessPuzzles() {
   const submitSolutionMutation = useMutation({
     mutationFn: async (data: { solved: boolean; solveTime: number; attempts: number }) => {
       if (!puzzle) return;
-      return await apiRequest("POST", `/api/puzzles/${puzzle.puzzleId}/solve`, { userId: "default", ...data });
+      return await apiRequest("POST", `/api/puzzles/${puzzle.PuzzleId}/solve`, { userId: "default", ...data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
@@ -126,31 +103,34 @@ export default function ChessPuzzles() {
   });
   
   const startPuzzle = (currentPuzzle: Puzzle) => {
+    if (!currentPuzzle) return;
     setIsAtStartPosition(false);
     setLastMoveWasIncorrect(false);
-    setGameState({ fen: currentPuzzle.fen, moves: [], isComplete: false, showSolution: false, feedback: { type: 'hint', message: "Opponent is thinking..." } });
+    setGameState({ fen: currentPuzzle.FEN, moves: [], isComplete: false, showSolution: false, feedback: { type: 'hint', message: "Opponent is thinking..." } });
     setHighlightedSquares([]); setHintArrows([]); setStartTime(null);
-    const solutionMoves = currentPuzzle.moves.split(' ');
+    const solutionMoves = (currentPuzzle.Moves || '').split(' ');
     const opponentFirstMove = solutionMoves[0];
     if (!opponentFirstMove) return;
     const opponentFrom = opponentFirstMove.substring(0, 2);
     const opponentTo = opponentFirstMove.substring(2, 4);
     setTimeout(() => {
-        const puzzleStartFen = updateFenWithMove(currentPuzzle.fen, opponentFrom, opponentTo);
+        const puzzleStartFen = updateFenWithMove(currentPuzzle.FEN, opponentFrom, opponentTo);
         setGameState({ fen: puzzleStartFen, moves: [opponentFirstMove], isComplete: false, showSolution: false, feedback: { type: 'hint', message: 'Your turn to move!' } });
         setHighlightedSquares([opponentFrom, opponentTo]);
         setStartTime(new Date());
     }, 1000);
   };
 
-  useEffect(() => { if (puzzle) { startPuzzle(puzzle); } }, [puzzle]);
+  useEffect(() => {
+    startPuzzle(puzzle as Puzzle);
+  }, [puzzle]);
   
   const handleMove = (from: string, to: string) => {
-    if (!puzzle || gameState.isComplete) return;
+    if (!puzzle || !puzzle.Moves || gameState.isComplete) return;
     setIsAtStartPosition(false);
     setHighlightedSquares([]);
     setHintArrows([]);
-    const solutionMoves = puzzle.moves.split(' ');
+    const solutionMoves = puzzle.Moves.split(' ');
     const currentMoveIndex = gameState.moves.length;
     const expectedMove = solutionMoves[currentMoveIndex];
     if (!expectedMove) return;
@@ -191,7 +171,7 @@ export default function ChessPuzzles() {
     if (!puzzle) return;
     setLastMoveWasIncorrect(false);
     if (gameState.moves.length === 1) {
-        setGameState({ ...gameState, fen: puzzle.fen, moves: [], isComplete: false, feedback: { type: 'hint', message: 'Press Forward to see the first move.' } });
+        setGameState({ ...gameState, fen: puzzle.FEN, moves: [], isComplete: false, feedback: { type: 'hint', message: 'Press Forward to see the first move.' } });
         setHighlightedSquares([]);
         setIsAtStartPosition(true);
         toast({ title: "Back to Start" });
@@ -200,7 +180,7 @@ export default function ChessPuzzles() {
     const lastMoveWasPlayer = gameState.moves.length % 2 === 0;
     const movesToUndo = lastMoveWasPlayer ? 1 : 2;
     const newMoves = gameState.moves.slice(0, gameState.moves.length - movesToUndo);
-    let boardFen = puzzle.fen;
+    let boardFen = puzzle.FEN;
     for (const move of newMoves) {
         const from = move.substring(0, 2); const to = move.substring(2, 4);
         boardFen = updateFenWithMove(boardFen, from, to);
@@ -214,21 +194,21 @@ export default function ChessPuzzles() {
   };
 
   const handleForward = () => {
-    if (!puzzle || gameState.moves.length > 0) return;
-    const solutionMoves = puzzle.moves.split(' ');
+    if (!puzzle || !puzzle.Moves || gameState.moves.length > 0) return;
+    const solutionMoves = puzzle.Moves.split(' ');
     const opponentFirstMove = solutionMoves[0];
     if (!opponentFirstMove) return;
     const opponentFrom = opponentFirstMove.substring(0, 2);
     const opponentTo = opponentFirstMove.substring(2, 4);
-    const puzzleStartFen = updateFenWithMove(puzzle.fen, opponentFrom, opponentTo);
+    const puzzleStartFen = updateFenWithMove(puzzle.FEN, opponentFrom, opponentTo);
     setGameState({ fen: puzzleStartFen, moves: [opponentFirstMove], isComplete: false, showSolution: false, feedback: { type: 'hint', message: 'Your turn to move!' } });
     setHighlightedSquares([opponentFrom, opponentTo]);
     setIsAtStartPosition(false);
   };
   
   const handleHint = () => {
-    if (!puzzle || gameState.isComplete) return;
-    const solutionMoves = puzzle.moves.split(' ');
+    if (!puzzle || !puzzle.Moves || gameState.isComplete) return;
+    const solutionMoves = puzzle.Moves.split(' ');
     const nextPlayerMove = solutionMoves[gameState.moves.length];
     if (!nextPlayerMove) return;
     const fromSquare = nextPlayerMove.substring(0, 2);
@@ -238,8 +218,8 @@ export default function ChessPuzzles() {
   };
 
   const handleShowSolution = () => {
-    if (!puzzle || gameState.isComplete) return;
-    const solutionMoves = puzzle.moves.split(' ');
+    if (!puzzle || !puzzle.Moves || gameState.isComplete) return;
+    const solutionMoves = puzzle.Moves.split(' ');
     const nextPlayerMove = solutionMoves[gameState.moves.length];
     if (!nextPlayerMove) return;
     const fromSquare = nextPlayerMove.substring(0, 2);
@@ -251,21 +231,11 @@ export default function ChessPuzzles() {
 
   const handleReset = () => { if (puzzle) { startPuzzle(puzzle); } };
   
-  const handleNextPuzzle = () => {
-    setPuzzleCounter(prev => prev + 1);
-    queryClient.invalidateQueries({ queryKey: ['puzzle', filters] });
-  };
-  
-  const handlePreviousPuzzle = () => {
-    setPuzzleCounter(prev => prev > 1 ? prev - 1 : 1);
-    queryClient.invalidateQueries({ queryKey: ['puzzle', filters] });
-  };
+  const handleNextPuzzle = () => { setPuzzleCounter(prev => prev + 1); };
+  const handlePreviousPuzzle = () => { setPuzzleCounter(prev => prev > 1 ? prev - 1 : 1); };
+  const handleFiltersApply = (newFilters: Filters) => { setPuzzleCounter(1); setFilters(newFilters); };
 
-  const handleFiltersApply = (newFilters: Filters) => {
-    setPuzzleCounter(1);
-    setFilters(newFilters);
-  };
-
+  // --- THIS IS THE FIX: The illegal comments have been replaced with the real UI ---
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -279,7 +249,7 @@ export default function ChessPuzzles() {
     );
   }
 
-  if (isError || !puzzle) {
+  if (isError) {
     return (
       <div className="min-h-screen bg-gray-50">
         <AppHeader />
@@ -299,6 +269,27 @@ export default function ChessPuzzles() {
       </div>
     );
   }
+  // ---------------------------------------------------------------------------------
+  
+  if (!puzzle || !puzzle.FEN || !puzzle.Moves) {
+    return (
+        <div className="min-h-screen bg-gray-50">
+            <AppHeader />
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <div className="text-lg text-red-600 text-center">
+                    <p>Error: Puzzle data is incomplete.</p>
+                    <p>Puzzle ID: {puzzle?.PuzzleId || 'N/A'}</p>
+                </div>
+            </div>
+        </div>
+    );
+  }
+  
+  const puzzleInfoProps = {
+      puzzleId: puzzle.PuzzleId,
+      rating: puzzle.Rating,
+      themes: puzzle.Themes,
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -307,7 +298,7 @@ export default function ChessPuzzles() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-3">
             <PuzzleInfo
-              puzzle={puzzle}
+              puzzle={puzzleInfoProps as any}
               puzzleNumber={puzzleCounter}
               onPrevious={handlePreviousPuzzle}
               onNext={handleNextPuzzle}
@@ -319,19 +310,15 @@ export default function ChessPuzzles() {
                   fen={gameState.fen}
                   onMove={handleMove}
                   disabled={gameState.isComplete}
-                  flipped={puzzle ? !isBlackToMove(puzzle.fen) : false}
+                  flipped={puzzle ? !isBlackToMove(puzzle.FEN) : false}
                   highlightedSquares={highlightedSquares}
                   arrows={hintArrows}
                 />
               </BoardWrapper>
               <div className="flex justify-center items-center space-x-4 mt-6">
-                {lastMoveWasIncorrect ? (
-                  <Button variant="outline" onClick={handleBack}><Undo className="w-4 h-4 mr-2" /> Undo</Button>
-                ) : isAtStartPosition ? (
-                  <Button variant="outline" onClick={handleForward}><ArrowRight className="w-4 h-4 mr-2" /> Forward</Button>
-                ) : (
-                  <Button variant="outline" onClick={handleBack} disabled={gameState.moves.length === 0}><ArrowLeft className="w-4 h-4 mr-2" /> Back</Button>
-                )}
+                {lastMoveWasIncorrect ? ( <Button variant="outline" onClick={handleBack}><Undo className="w-4 h-4 mr-2" /> Undo</Button>
+                ) : isAtStartPosition ? ( <Button variant="outline" onClick={handleForward}><ArrowRight className="w-4 h-4 mr-2" /> Forward</Button>
+                ) : ( <Button variant="outline" onClick={handleBack} disabled={gameState.moves.length === 0}><ArrowLeft className="w-4 h-4 mr-2" /> Back</Button> )}
                 <Button variant="outline" onClick={handleHint} disabled={gameState.isComplete}><Lightbulb className="w-4 h-4 mr-2" /> Hint</Button>
                 <Button variant="outline" onClick={handleShowSolution} disabled={gameState.isComplete} className="bg-yellow-500 hover:bg-yellow-600 text-white border-yellow-500"><Eye className="w-4 h-4 mr-2" /> Solution</Button>
                 <Button variant="outline" onClick={handleReset}><RotateCcw className="w-4 h-4 mr-2" /> Reset</Button>
@@ -350,13 +337,7 @@ export default function ChessPuzzles() {
               </div>
             )}
             <div className="mt-6">
-              <Alert className={`${
-                gameState.feedback?.type === 'success'
-                  ? 'bg-green-50'
-                  : gameState.feedback?.type === 'error'
-                  ? 'bg-red-50'
-                  : 'bg-gray-50'
-              }`}>
+              <Alert className={`${ gameState.feedback?.type === 'success' ? 'bg-green-50' : gameState.feedback?.type === 'error' ? 'bg-red-50' : 'bg-gray-50' }`}>
                 <AlertDescription>{gameState.feedback?.message || `Ready to solve: Make your move!`}</AlertDescription>
               </Alert>
             </div>
