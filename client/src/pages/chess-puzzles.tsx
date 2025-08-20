@@ -261,7 +261,7 @@ export default function ChessPuzzles() {
               </div>
             </div>
             <div className="lg:col-span-1">
-              <PuzzleSidebar onFiltersApply={handleFiltersApply} />
+              <PuzzleSidebar filters={filters} onFiltersApply={handleFiltersApply} />
             </div>
           </div>
         </div>
@@ -348,21 +348,9 @@ export default function ChessPuzzles() {
                 <Button variant="outline" onClick={handleReset}><RotateCcw className="w-4 h-4 mr-2" /> Reset</Button>
               </div>
             </div>
-            {gameState.moves.length > 0 && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <h3 className="font-medium text-gray-900 mb-2">Your Moves:</h3>
-                <div className="text-sm text-gray-600">
-                  {gameState.moves.map((move, index) => (
-                    <span key={index} className="mr-2">
-                      {Math.ceil((index + 1) / 2)}. {move}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
           <div className="lg:col-span-1">
-            <PuzzleSidebar onFiltersApply={handleFiltersApply} />
+            <PuzzleSidebar filters={filters} onFiltersApply={handleFiltersApply} />
           </div>
         </div>
       </div>

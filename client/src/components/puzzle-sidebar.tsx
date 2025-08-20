@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Star, TrendingUp } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -46,7 +46,10 @@ export interface Filters {
   difficulties: Difficulty[];
   themes: string[];
 }
-interface PuzzleSidebarProps { onFiltersApply: (filters: Filters) => void; }
+interface PuzzleSidebarProps {
+  filters: Filters;
+  onFiltersApply: (filters: Filters) => void;
+}
 const commonThemes = [
   'mateIn1', 'mateIn2', 'crushing', 'advantage', 'endgame',
   'opening', 'fork', 'pin', 'skewer', 'sacrifice'
@@ -57,9 +60,15 @@ const difficultyRatingMap = {
     hard: { min: 1801, max: 3000 },
 };
 
-export function PuzzleSidebar({ onFiltersApply }: PuzzleSidebarProps) {
-  const [selectedDifficulties, setSelectedDifficulties] = useState<Difficulty[]>([]);
-  const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
+export function PuzzleSidebar({ filters, onFiltersApply }: PuzzleSidebarProps) {
+  // Sync local state with filters prop
+  const [selectedDifficulties, setSelectedDifficulties] = useState<Filters['difficulties']>(filters.difficulties);
+  const [selectedThemes, setSelectedThemes] = useState<Filters['themes']>(filters.themes);
+
+  useEffect(() => {
+    setSelectedDifficulties(filters.difficulties);
+    setSelectedThemes(filters.themes);
+  }, [filters.difficulties, filters.themes]);
 
   const isAnyDifficulty = selectedDifficulties.length === 0;
   const isAnyTheme = selectedThemes.length === 0;

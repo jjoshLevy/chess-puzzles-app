@@ -14,22 +14,47 @@ app.use(express.json());
 const clientDistPath = path.resolve(__dirname, '../client/dist');
 app.use(express.static(clientDistPath));
 
+// Improved /api/puzzles endpoint with filters support
 app.get('/api/puzzles', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   try {
-    // --- THIS IS THE FINAL FIX ---
-    // This query now explicitly filters out any puzzles that are missing
-    // the essential FEN or Moves data.
-    const stmnt = db.prepare(
-        "SELECT * FROM Puzzle WHERE FEN IS NOT NULL AND FEN != '' AND Moves IS NOT NULL AND Moves != '' ORDER BY RANDOM() LIMIT 1"
-    );
-    // -----------------------------
+    let query = "SELECT * FROM Puzzle WHERE FEN IS NOT NULL AND FEN != '' AND Moves IS NOT NULL AND Moves != ''";
+    const params: any[] = [];
 
-    const puzzle = stmnt.get();
+    // Difficulty filter
+    if (req.query.difficulties) {
+      const difficulties = String(req.query.difficulties).split(',');
+      // Map difficulty to rating ranges
+      const ranges: Record<string, [number, number]> = {
+        easy: [400, 1200],
+        medium: [1201, 1800],
+        hard: [1801, 3000],
+      };
+      const ratingConditions = difficulties
+        .filter(d => ranges[d])
+        .map(d => `(Rating >= ${ranges[d][0]} AND Rating <= ${ranges[d][1]})`);
+      if (ratingConditions.length > 0) {
+        query += " AND (" + ratingConditions.join(" OR ") + ")";
+      }
+    }
+
+    // Theme filter
+    if (req.query.themes) {
+      const themes = String(req.query.themes).split(',');
+      if (themes.length > 0) {
+        query += " AND (" + themes.map(() => "Themes LIKE ?").join(" OR ") + ")";
+        themes.forEach(theme => params.push(`%${theme}%`));
+      }
+    }
+
+    query += " ORDER BY RANDOM() LIMIT 1";
+    const stmnt = db.prepare(query);
+    const puzzle = stmnt.get(...params);
+
     if (puzzle) {
-        res.json(puzzle);
+      res.json(puzzle);
     } else {
-        res.status(404).json({ error: "Could not find any complete puzzles in the database." });
+      res.status(404).json({ error: "Could not find any complete puzzles in the database." });
     }
   } catch (err: any) {
     res.status(500).json({ error: 'Error fetching puzzle' });

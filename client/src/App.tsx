@@ -1,11 +1,19 @@
-// Correctly import your main puzzle page from the 'pages' folder.
-// The filename is 'chess-puzzles.tsx' (lowercase with hyphen).
-// The component name is 'ChessPuzzles' as exported by the file.
-import ChessPuzzlesPage from './pages/chess-puzzles'; 
+import { Route, Switch } from "wouter";
+import ChessPuzzlesPage from "./pages/chess-puzzles";
+import Statistics from "./pages/statistics";
+import Leaderboard from "./pages/leaderboard";
 
-function App() {
-  // The only job of App.tsx is to render your main application page.
-  return <ChessPuzzlesPage />;
+export default function App() {
+  return (
+    <Switch>
+      <Route path="/" component={ChessPuzzlesPage} />
+      <Route path="/statistics" component={Statistics} />
+      <Route path="/leaderboard" component={Leaderboard} />
+      <Route>
+        <div className="min-h-screen flex items-center justify-center text-2xl">
+          404 - Page Not Found
+        </div>
+      </Route>
+    </Switch>
+  );
 }
-
-export default App;
