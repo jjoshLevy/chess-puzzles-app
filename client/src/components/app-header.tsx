@@ -25,6 +25,12 @@ export function AppHeader() {
               Puzzles
             </Link>
             <Link
+              href="/timed-challenges"
+              className="text-gray-700 hover:text-primary transition-colors"
+            >
+              Timed Challenges
+            </Link>
+            <Link
               href="/import"
               className="text-gray-700 hover:text-primary transition-colors"
             >

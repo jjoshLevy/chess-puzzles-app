@@ -170,3 +170,7 @@ export function getPossibleMoves(fen: string, fromSquare: string): string[] {
 
     return legalMoves;
 }
+
+export function updateFenWithMove(fen: string, from: string, to: string) {
+  // ...your implementation here...
+}

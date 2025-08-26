@@ -24,7 +24,6 @@ app.get('/api/puzzles', (req, res) => {
     // Difficulty filter
     if (req.query.difficulties) {
       const difficulties = String(req.query.difficulties).split(',');
-      // Map difficulty to rating ranges
       const ranges: Record<string, [number, number]> = {
         easy: [400, 1200],
         medium: [1201, 1800],
@@ -61,10 +60,44 @@ app.get('/api/puzzles', (req, res) => {
   }
 });
 
-// Mock endpoint for user rating
+// Endpoint to update user rating after solving a puzzle
+app.post('/api/puzzles/:id/solve', (req, res) => {
+  const { userId = "default", solved } = req.body;
+  const puzzleId = req.params.id;
+
+  // Get puzzle difficulty (rating)
+  const puzzle = db.prepare("SELECT Rating FROM Puzzle WHERE PuzzleId = ?").get(puzzleId);
+  if (!puzzle) return res.status(404).json({ error: "Puzzle not found" });
+
+  // Get or create user rating
+  let user = db.prepare("SELECT rating FROM UserRating WHERE userId = ?").get(userId);
+  if (!user) {
+    db.prepare("INSERT INTO UserRating (userId, rating) VALUES (?, 1500)").run(userId);
+    user = { rating: 1500 };
+  }
+
+  // Elo-like calculation
+  const K = 32;
+  const puzzleRating = puzzle.Rating;
+  const expected = 1 / (1 + Math.pow(10, (puzzleRating - user.rating) / 400));
+  const score = solved ? 1 : 0;
+  const newRating = Math.round(user.rating + K * (score - expected));
+
+  db.prepare("UPDATE UserRating SET rating = ? WHERE userId = ?").run(newRating, userId);
+
+  res.json({ newRating });
+});
+
+// Endpoint for user rating (returns real rating)
 app.get('/api/user/rating', (req, res) => {
-    res.setHeader('Cache-control', 'no-store');
-    res.json({ rating: 1500 });
+  const userId = "default";
+  let user = db.prepare("SELECT rating FROM UserRating WHERE userId = ?").get(userId);
+  if (!user) {
+    db.prepare("INSERT INTO UserRating (userId, rating) VALUES (?, 1500)").run(userId);
+    user = { rating: 1500 };
+  }
+  res.setHeader('Cache-control', 'no-store');
+  res.json({ rating: user.rating });
 });
 
 app.get('*', (req, res) => {
