@@ -171,6 +171,54 @@ export function getPossibleMoves(fen: string, fromSquare: string): string[] {
     return legalMoves;
 }
 
+function pieceToFenChar(piece: ChessPiece): string {
+  const typeCharMap: Record<PieceType, string> = {
+    king: 'k',
+    queen: 'q',
+    rook: 'r',
+    bishop: 'b',
+    knight: 'n',
+    pawn: 'p',
+  };
+  const ch = typeCharMap[piece.type];
+  return piece.color === 'white' ? ch.toUpperCase() : ch;
+}
+
 export function updateFenWithMove(fen: string, from: string, to: string) {
-  // ...your implementation here...
+  // Minimal FEN update: move piece from -> to, toggle side to move, keep other FEN fields
+  const board = fenToBoard(fen);
+  const [fromRank, fromFile] = squareToIndices(from);
+  const [toRank, toFile] = squareToIndices(to);
+
+  const piece = board[fromRank][fromFile];
+  if (!piece) {
+    // No piece at the source square; return original FEN unchanged
+    return fen;
+  }
+
+  // Apply move on board (captures handled implicitly by overwrite)
+  board[fromRank][fromFile] = null;
+  board[toRank][toFile] = piece;
+
+  // Rebuild FEN position string
+  let position = '';
+  for (let r = 0; r < 8; r++) {
+    let empty = 0;
+    for (let f = 0; f < 8; f++) {
+      const p = board[r][f];
+      if (p) {
+        if (empty > 0) { position += empty; empty = 0; }
+        position += pieceToFenChar(p);
+      } else {
+        empty++;
+      }
+    }
+    if (empty > 0) position += empty;
+    if (r < 7) position += '/';
+  }
+
+  const parts = fen.split(' ');
+  const sideToMove = parts[1] === 'w' ? 'b' : 'w';
+  const rest = parts.slice(2).join(' ');
+  return `${position} ${sideToMove} ${rest}`;
 }

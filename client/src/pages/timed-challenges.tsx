@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ChessBoard } from "@/components/chess-board";
 import { BoardWrapper } from "@/components/BoardWrapper";
 import { isBlackToMove, updateFenWithMove } from "@/lib/chess-utils";
+import { useToast } from "@/hooks/use-toast";
 
 const TIME_OPTIONS = [
   { label: "1 Minute", value: 60 },
@@ -21,6 +22,7 @@ export default function TimedChallenges() {
   const [gameState, setGameState] = useState<{ fen: string; moves: string[]; isComplete: boolean }>({ fen: "", moves: [], isComplete: false });
   const [loadingPuzzle, setLoadingPuzzle] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const { toast } = useToast();
 
   // Fetch a random puzzle from your API
   const fetchPuzzle = async () => {
@@ -29,7 +31,7 @@ export default function TimedChallenges() {
     if (res.ok) {
       const p = await res.json();
       setPuzzle(p);
-      // Start the puzzle at the correct position (after opponent's first move)
+      // Auto-play the opponent's first move so it's the player's turn
       const solutionMoves = (p.Moves || '').split(' ');
       if (solutionMoves.length > 0) {
         const opponentMove = solutionMoves[0];
@@ -103,7 +105,14 @@ export default function TimedChallenges() {
         }
       }
     } else {
-      // Incorrect move: do nothing or show feedback (optional)
+      // Incorrect move: apply it, show feedback, then fetch next puzzle
+      const newFen = updateFenWithMove(gameState.fen, from, to);
+      const newMoves = [...gameState.moves, `${from}${to}`];
+      setGameState({ fen: newFen, moves: newMoves, isComplete: true });
+      toast({ title: "Incorrect Move", description: "Moving to the next puzzle.", variant: "destructive" });
+      setTimeout(async () => {
+        await fetchPuzzle();
+      }, 800);
     }
   };
 
