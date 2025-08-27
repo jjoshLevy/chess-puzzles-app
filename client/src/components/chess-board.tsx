@@ -4,12 +4,14 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 interface Arrow { from: string; to: string; color?: string; }
+interface MoveMarker { square: string; type: 'correct' | 'incorrect' }
 interface ChessBoardProps {
   fen: string; onMove?: (from: string, to: string) => void;
   highlightedSquares?: string[]; arrows?: Arrow[]; disabled?: boolean; flipped?: boolean;
+  markers?: MoveMarker[];
 }
 
-export function ChessBoard({ fen, onMove, highlightedSquares = [], arrows = [], disabled = false, flipped = false }: ChessBoardProps) {
+export function ChessBoard({ fen, onMove, highlightedSquares = [], arrows = [], disabled = false, flipped = false, markers = [] }: ChessBoardProps) {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
   const [draggedPiece, setDraggedPiece] = useState<{ square: string; piece: ChessPiece } | null>(null);
@@ -88,6 +90,7 @@ export function ChessBoard({ fen, onMove, highlightedSquares = [], arrows = [], 
             const isSelected = selectedSquare === square;
             const isPossibleMove = possibleMoves.includes(square);
             const isHighlighted = highlightedSquares.includes(square);
+            const marker = markers.find(m => m.square === square);
 
             // --- THIS IS THE NEW LOGIC ---
             // A move is a capture if it's a possible move AND there's a piece on the target square.
@@ -106,6 +109,18 @@ export function ChessBoard({ fen, onMove, highlightedSquares = [], arrows = [], 
                 {/* Renders a grey ring around the piece that can be captured */}
                 {isCapture && (
                   <div className="absolute w-[90%] h-[90%] border-4 border-gray-500/50 rounded-full"></div>
+                )}
+
+                {/* Move feedback marker (tick/cross) in the corner */}
+                {marker && (
+                  <div
+                    className={cn(
+                      "absolute -top-1 -right-1 z-20 w-8 h-8 rounded-full text-base font-extrabold flex items-center justify-center shadow-md",
+                      marker.type === 'correct' ? "bg-green-600 text-white" : "bg-red-600 text-white"
+                    )}
+                  >
+                    {marker.type === 'correct' ? '✓' : '✗'}
+                  </div>
                 )}
                 
                 {piece && (

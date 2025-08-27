@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { ChessBoard } from "@/components/chess-board";
 import { BoardWrapper } from "@/components/BoardWrapper";
 import { isBlackToMove, updateFenWithMove } from "@/lib/chess-utils";
-import { useToast } from "@/hooks/use-toast";
 
 const TIME_OPTIONS = [
   { label: "1 Minute", value: 60 },
@@ -21,8 +20,10 @@ export default function TimedChallenges() {
   const [challengeFinished, setChallengeFinished] = useState(false);
   const [gameState, setGameState] = useState<{ fen: string; moves: string[]; isComplete: boolean }>({ fen: "", moves: [], isComplete: false });
   const [loadingPuzzle, setLoadingPuzzle] = useState(false);
+  const [highlightedSquares, setHighlightedSquares] = useState<string[]>([]);
+  const [awaitingFirstMove, setAwaitingFirstMove] = useState(false);
+  const [markers, setMarkers] = useState<{ square: string; type: 'correct' | 'incorrect' }[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const { toast } = useToast();
 
   // Fetch a random puzzle from your API
   const fetchPuzzle = async () => {
@@ -31,16 +32,22 @@ export default function TimedChallenges() {
     if (res.ok) {
       const p = await res.json();
       setPuzzle(p);
-      // Auto-play the opponent's first move so it's the player's turn
       const solutionMoves = (p.Moves || '').split(' ');
+      // Start at initial FEN, then after a brief delay apply opponent's first move
+      setGameState({ fen: p.FEN, moves: [], isComplete: false });
+      setHighlightedSquares([]);
       if (solutionMoves.length > 0) {
+        setAwaitingFirstMove(true);
         const opponentMove = solutionMoves[0];
         const from = opponentMove.substring(0, 2);
         const to = opponentMove.substring(2, 4);
-        const fenAfter = updateFenWithMove(p.FEN, from, to);
-        setGameState({ fen: fenAfter, moves: [opponentMove], isComplete: false });
-      } else {
-        setGameState({ fen: p.FEN, moves: [], isComplete: false });
+        setTimeout(() => {
+          const fenAfter = updateFenWithMove(p.FEN, from, to);
+          setGameState({ fen: fenAfter, moves: [opponentMove], isComplete: false });
+          setHighlightedSquares([from, to]);
+          setAwaitingFirstMove(false);
+          setTimeout(() => setHighlightedSquares([]), 800);
+        }, 700);
       }
     }
     setLoadingPuzzle(false);
@@ -84,6 +91,8 @@ export default function TimedChallenges() {
       // Correct move
       const newFen = updateFenWithMove(gameState.fen, from, to);
       const newMoves = [...gameState.moves, `${from}${to}`];
+      setMarkers([{ square: to, type: 'correct' }]);
+      setTimeout(() => setMarkers([]), 600);
       // If puzzle is complete (all solution moves played)
       if (newMoves.length === solutionMoves.length) {
         setGameState({ fen: newFen, moves: newMoves, isComplete: true });
@@ -94,22 +103,25 @@ export default function TimedChallenges() {
         }, 800);
       } else {
         // If not complete, play opponent's move automatically
-        const opponentMove = solutionMoves[newMoves.length];
-        if (opponentMove) {
-          const oppFrom = opponentMove.substring(0, 2);
-          const oppTo = opponentMove.substring(2, 4);
-          const fenAfterOpp = updateFenWithMove(newFen, oppFrom, oppTo);
-          setGameState({ fen: fenAfterOpp, moves: [...newMoves, opponentMove], isComplete: false });
-        } else {
-          setGameState({ fen: newFen, moves: newMoves, isComplete: false });
-        }
+        setTimeout(() => {
+          const opponentMove = solutionMoves[newMoves.length];
+          if (opponentMove) {
+            const oppFrom = opponentMove.substring(0, 2);
+            const oppTo = opponentMove.substring(2, 4);
+            const fenAfterOpp = updateFenWithMove(newFen, oppFrom, oppTo);
+            setGameState({ fen: fenAfterOpp, moves: [...newMoves, opponentMove], isComplete: false });
+          } else {
+            setGameState({ fen: newFen, moves: newMoves, isComplete: false });
+          }
+        }, 400);
       }
     } else {
-      // Incorrect move: apply it, show feedback, then fetch next puzzle
+      // Incorrect move: apply it, show marker, then fetch next puzzle
       const newFen = updateFenWithMove(gameState.fen, from, to);
       const newMoves = [...gameState.moves, `${from}${to}`];
       setGameState({ fen: newFen, moves: newMoves, isComplete: true });
-      toast({ title: "Incorrect Move", description: "Moving to the next puzzle.", variant: "destructive" });
+      setMarkers([{ square: to, type: 'incorrect' }]);
+      setTimeout(() => setMarkers([]), 600);
       setTimeout(async () => {
         await fetchPuzzle();
       }, 800);
@@ -176,8 +188,10 @@ export default function TimedChallenges() {
                   <ChessBoard
                     fen={gameState.fen}
                     onMove={handleMove}
-                    disabled={gameState.isComplete}
+                    disabled={gameState.isComplete || awaitingFirstMove}
                     flipped={puzzle ? !isBlackToMove(puzzle.FEN) : false}
+                    highlightedSquares={highlightedSquares}
+                    markers={markers}
                   />
                 </BoardWrapper>
               )}
