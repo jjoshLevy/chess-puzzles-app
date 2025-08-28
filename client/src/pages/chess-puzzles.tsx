@@ -68,6 +68,7 @@ export default function ChessPuzzles() {
   const [markers, setMarkers] = useState<Array<{ square: string; type: 'correct' | 'incorrect' }>>([]);
   const [opponentAnim, setOpponentAnim] = useState<{ from: string; to: string } | null>(null);
   const [animProgress, setAnimProgress] = useState(false);
+  const [overlayMarker, setOverlayMarker] = useState<{ square: string; type: 'correct' | 'incorrect' } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [boardRect, setBoardRect] = useState<{
     top: number; left: number; width: number; height: number;
@@ -112,6 +113,7 @@ export default function ChessPuzzles() {
     setLastMoveWasIncorrect(false);
     setGameState({ fen: currentPuzzle.FEN, moves: [], isComplete: false, showSolution: false, feedback: { type: 'hint', message: "Opponent is thinking..." } });
     setHighlightedSquares([]); setHintArrows([]); setStartTime(null);
+    setMarkers([]); setOverlayMarker(null);
     const solutionMoves = (currentPuzzle.Moves || '').split(' ');
     const opponentFirstMove = solutionMoves[0];
     if (!opponentFirstMove) return;
@@ -138,6 +140,21 @@ export default function ChessPuzzles() {
   useEffect(() => {
     startPuzzle(puzzle as Puzzle);
   }, [puzzle]);
+
+  // Keyboard navigation with arrow keys for back/forward
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleBack();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleForward();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [gameState.fen, gameState.moves.length]);
 
   // Measure the chess board position/size relative to our wrapper
   useEffect(() => {
@@ -168,6 +185,8 @@ export default function ChessPuzzles() {
     setIsAtStartPosition(false);
     setHighlightedSquares([]);
     setHintArrows([]);
+    setMarkers([]);
+    setOverlayMarker(null);
     const solutionMoves = puzzle.Moves.split(' ');
     const currentMoveIndex = gameState.moves.length;
     const expectedMove = solutionMoves[currentMoveIndex];
@@ -180,8 +199,8 @@ export default function ChessPuzzles() {
         setOpponentAnim({ from, to });
         setAnimProgress(false);
         setTimeout(() => setAnimProgress(true), 50);
-        // Show correct marker at the moment the animation ends
-        setTimeout(() => { setMarkers([{ square: to, type: 'correct' }]); }, 800);
+        // Show correct marker at the moment the animation ends (overlay and base)
+        setTimeout(() => { setOverlayMarker({ square: to, type: 'correct' }); setMarkers([{ square: to, type: 'correct' }]); }, 800);
         setTimeout(() => setMarkers([]), 1400);
         setTimeout(() => {
             const playerFen = updateFenWithMove(gameState.fen, from, to);
@@ -190,6 +209,7 @@ export default function ChessPuzzles() {
             // Clear player animation overlay before opponent begins thinking
             setOpponentAnim(null);
             setAnimProgress(false);
+            setOverlayMarker(null);
             const opponentReplyIndex = currentMoveIndex + 1;
         if (opponentReplyIndex < solutionMoves.length) {
             const opponentMove = solutionMoves[opponentReplyIndex];
@@ -198,6 +218,9 @@ export default function ChessPuzzles() {
             // Add a short thinking delay before the opponent moves
             setWaitingForOpponent(true);
             setTimeout(() => {
+              // Clear any previous markers before opponent moves
+              setMarkers([]);
+              setOverlayMarker(null);
               // Trigger animated move for the opponent piece before applying it to the FEN
               setOpponentAnim({ from: opponentFrom, to: opponentTo });
               setHighlightedSquares([opponentFrom, opponentTo]);
@@ -222,6 +245,8 @@ export default function ChessPuzzles() {
             submitSolutionMutation.mutate({ solved: true, solveTime, attempts: 1 });
             // Delay the solved overlay slightly so the final move is visible first
             setTimeout(() => {
+              setMarkers([]);
+              setOverlayMarker(null);
               setGameState(prev => ({ ...prev, isComplete: true }));
             }, 700);
         }
@@ -232,8 +257,8 @@ export default function ChessPuzzles() {
         setOpponentAnim({ from, to });
         setAnimProgress(false);
         setTimeout(() => setAnimProgress(true), 50);
-        // Show incorrect marker at the moment the animation ends
-        setTimeout(() => { setMarkers([{ square: to, type: 'incorrect' }]); }, 800);
+        // Show incorrect marker at the moment the animation ends (overlay and base)
+        setTimeout(() => { setOverlayMarker({ square: to, type: 'incorrect' }); setMarkers([{ square: to, type: 'incorrect' }]); }, 800);
         setTimeout(() => setMarkers([]), 2000);
         setTimeout(() => {
           const newFen = updateFenWithMove(gameState.fen, from, to);
@@ -242,13 +267,75 @@ export default function ChessPuzzles() {
           // Clear player animation overlay
           setOpponentAnim(null);
           setAnimProgress(false);
+          setOverlayMarker(null);
         }, 1250);
     }
+  };
+
+  const handleDropMove = (from: string, to: string) => {
+    if (!puzzle || !puzzle.Moves || gameState.isComplete) return;
+    const solutionMoves = puzzle.Moves.split(' ');
+    const currentMoveIndex = gameState.moves.length;
+    const expectedMove = solutionMoves[currentMoveIndex];
+    if (!expectedMove) return;
+    const expectedFrom = expectedMove.substring(0, 2);
+    const expectedTo = expectedMove.substring(2, 4);
+    setMarkers([]);
+    setOverlayMarker(null);
+    setHighlightedSquares([from, to]);
+    if (from === expectedFrom && to === expectedTo) {
+      const playerFen = updateFenWithMove(gameState.fen, from, to);
+      const playerMoves = [...gameState.moves, `${from}${to}`];
+      setMarkers([{ square: to, type: 'correct' }]);
+      setLastMoveWasIncorrect(false);
+      setGameState(prev => ({ ...prev, fen: playerFen, moves: playerMoves }));
+      const opponentReplyIndex = currentMoveIndex + 1;
+      if (opponentReplyIndex < solutionMoves.length) {
+        setWaitingForOpponent(true);
+        setTimeout(() => {
+          // Clear any previous markers before opponent moves
+          setMarkers([]);
+          setOverlayMarker(null);
+          const opponentMove = solutionMoves[opponentReplyIndex];
+          const opponentFrom = opponentMove.substring(0, 2);
+          const opponentTo = opponentMove.substring(2, 4);
+          setOpponentAnim({ from: opponentFrom, to: opponentTo });
+          setHighlightedSquares([opponentFrom, opponentTo]);
+          setAnimProgress(false);
+          setTimeout(() => setAnimProgress(true), 50);
+          setTimeout(() => {
+            const finalFen = updateFenWithMove(playerFen, opponentFrom, opponentTo);
+            const finalMoves = [...playerMoves, `${opponentFrom}${opponentTo}`];
+            setGameState(prev => ({ ...prev, fen: finalFen, moves: finalMoves }));
+            setOpponentAnim(null);
+            setAnimProgress(false);
+            setWaitingForOpponent(false);
+          }, 650);
+        }, 150);
+      } else {
+        const solveTime = startTime ? Math.floor((Date.now() - startTime.getTime()) / 1000) : 0;
+        submitSolutionMutation.mutate({ solved: true, solveTime, attempts: 1 });
+        setTimeout(() => {
+          setMarkers([]);
+          setOverlayMarker(null);
+          setGameState(prev => ({ ...prev, isComplete: true }));
+        }, 500);
+      }
+    } else {
+      const newFen = updateFenWithMove(gameState.fen, from, to);
+      const newMoves = [...gameState.moves, `${from}${to}`];
+      setMarkers([{ square: to, type: 'incorrect' }]);
+      setLastMoveWasIncorrect(true);
+      setGameState(prev => ({ ...prev, fen: newFen, moves: newMoves, isComplete: false }));
+    }
+    setTimeout(() => setHighlightedSquares([]), 500);
   };
 
   const handleBack = () => {
     if (!puzzle) return;
     setLastMoveWasIncorrect(false);
+    setMarkers([]);
+    setOverlayMarker(null);
     if (gameState.moves.length === 1) {
         setGameState({ ...gameState, fen: puzzle.FEN, moves: [], isComplete: false, feedback: { type: 'hint', message: 'Press Forward to see the first move.' } });
         setHighlightedSquares([]);
@@ -272,6 +359,8 @@ export default function ChessPuzzles() {
 
   const handleForward = () => {
     if (!puzzle || !puzzle.Moves || gameState.moves.length > 0) return;
+    setMarkers([]);
+    setOverlayMarker(null);
     const solutionMoves = puzzle.Moves.split(' ');
     const opponentFirstMove = solutionMoves[0];
     if (!opponentFirstMove) return;
@@ -387,11 +476,25 @@ export default function ChessPuzzles() {
               onBookmark={() => {}}
             />
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex justify-center mb-3">
+                {gameState.isComplete ? (
+                  <div className="px-4 py-1 rounded-full bg-green-600 text-white font-semibold flex items-center gap-2">
+                    <span className="text-lg">✓</span>
+                    <span>Solved</span>
+                  </div>
+                ) : (
+                  <div className="px-4 py-1 rounded-full bg-gray-800 text-white font-semibold">
+                    {isBlackToMove(gameState.fen) ? 'Black to move' : 'White to move'}
+                  </div>
+                )}
+              </div>
               <div className="relative" ref={wrapperRef}>
-                <BoardWrapper onPrevious={handlePreviousPuzzle} onNext={handleNextPuzzle}>
+                <div className="origin-top mx-auto transition-transform">
+                  <BoardWrapper onPrevious={handlePreviousPuzzle} onNext={handleNextPuzzle}>
                   <ChessBoard
                     fen={gameState.fen}
                     onMove={handleMove}
+                    onDropMove={handleDropMove}
                     disabled={gameState.isComplete || opponentAnim !== null || waitingForOpponent}
                     flipped={puzzle ? !isBlackToMove(puzzle.FEN) : false}
                     highlightedSquares={highlightedSquares}
@@ -399,6 +502,7 @@ export default function ChessPuzzles() {
                     markers={markers}
                   />
                 </BoardWrapper>
+                </div>
                 {/* Opponent move animation overlay */}
                 {opponentAnim && boardRect && (() => {
                   const [fr, ff] = squareToIndices(opponentAnim.from);
@@ -436,6 +540,15 @@ export default function ChessPuzzles() {
                           style={{ top: topEnd, left: leftEnd, width: cellInt, height: cellInt }}
                         />
                       )}
+                      {/* Highlight from/to squares during motion */}
+                      <div
+                        className="absolute"
+                        style={{ top: topStart, left: leftStart, width: cellInt, height: cellInt, backgroundColor: 'rgba(34,197,94,0.35)' }}
+                      />
+                      <div
+                        className="absolute"
+                        style={{ top: topEnd, left: leftEnd, width: cellInt, height: cellInt, backgroundColor: 'rgba(34,197,94,0.35)' }}
+                      />
                       {/* Moving piece */}
                       <div
                         className="absolute flex items-center justify-center"
@@ -455,6 +568,19 @@ export default function ChessPuzzles() {
                           {pieceSymbol}
                         </span>
                       </div>
+                      {/* Overlay tick/cross marker at destination as soon as the piece arrives */}
+                      {overlayMarker && overlayMarker.square === opponentAnim.to && (
+                        <div
+                          className="absolute"
+                          style={{ top: topEnd, left: leftEnd, width: cellInt, height: cellInt }}
+                        >
+                          <div
+                            className={`absolute -top-1 -right-1 z-50 w-8 h-8 rounded-full text-base font-extrabold flex items-center justify-center shadow-md ${overlayMarker.type === 'correct' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}
+                          >
+                            {overlayMarker.type === 'correct' ? '✓' : '✗'}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

@@ -7,11 +7,12 @@ interface Arrow { from: string; to: string; color?: string; }
 interface MoveMarker { square: string; type: 'correct' | 'incorrect' }
 interface ChessBoardProps {
   fen: string; onMove?: (from: string, to: string) => void;
+  onDropMove?: (from: string, to: string) => void;
   highlightedSquares?: string[]; arrows?: Arrow[]; disabled?: boolean; flipped?: boolean;
   markers?: MoveMarker[];
 }
 
-export function ChessBoard({ fen, onMove, highlightedSquares = [], arrows = [], disabled = false, flipped = false, markers = [] }: ChessBoardProps) {
+export function ChessBoard({ fen, onMove, onDropMove, highlightedSquares = [], arrows = [], disabled = false, flipped = false, markers = [] }: ChessBoardProps) {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
   const [draggedPiece, setDraggedPiece] = useState<{ square: string; piece: ChessPiece } | null>(null);
@@ -49,9 +50,13 @@ export function ChessBoard({ fen, onMove, highlightedSquares = [], arrows = [], 
       setPossibleMoves(getPossibleMoves(fen, square));
       const dragImage = document.createElement('div');
       dragImage.style.cssText = "position:absolute; top:-1000px; left:-1000px; width:60px; height:60px; font-size:56px; text-align:center; line-height:70px; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;";
+      dragImage.style.color = piece.color === 'white' ? '#ffffff' : '#000000';
       dragImage.textContent = getPieceSymbol(piece);
       document.body.appendChild(dragImage);
-      e.dataTransfer.setDragImage(dragImage, 30, 30);
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setDragImage(dragImage, 30, 30);
+      }
       setTimeout(() => { if (document.body.contains(dragImage)) document.body.removeChild(dragImage); }, 0);
     } else {
       e.preventDefault();
@@ -66,13 +71,19 @@ export function ChessBoard({ fen, onMove, highlightedSquares = [], arrows = [], 
     if (!draggedPiece || disabled) return;
     const fromSquare = draggedPiece.square;
     const targetSquare = indicesToSquare(rank, file);
+    // If dropped on the same square, cancel without error
+    if (fromSquare === targetSquare) {
+      setDraggedPiece(null); setSelectedSquare(null); setPossibleMoves([]);
+      return;
+    }
     if (possibleMoves.includes(targetSquare)) {
-        onMove?.(fromSquare, targetSquare);
+        if (onDropMove) onDropMove(fromSquare, targetSquare);
+        else onMove?.(fromSquare, targetSquare);
     } else {
         toast({ title: "Illegal Move", description: "That move is not permitted by the rules of chess.", variant: "destructive" });
     }
     setDraggedPiece(null); setSelectedSquare(null); setPossibleMoves([]);
-  }, [draggedPiece, onMove, disabled, fen, toast, possibleMoves]);
+  }, [draggedPiece, onMove, onDropMove, disabled, fen, toast, possibleMoves]);
 
   const displayBoard = flipped ? [...board].reverse().map(row => [...row].reverse()) : board;
   const getDisplaySquare = (displayRank: number, displayFile: number) => {
