@@ -133,8 +133,8 @@ export default function ChessPuzzles() {
           setOpponentAnim(null);
           setAnimProgress(false);
           setStartTime(new Date());
-        }, 900);
-    }, 1000);
+        }, 300);
+    }, 300);
   };
 
   useEffect(() => {
@@ -200,8 +200,8 @@ export default function ChessPuzzles() {
         setAnimProgress(false);
         setTimeout(() => setAnimProgress(true), 50);
         // Show correct marker at the moment the animation ends (overlay and base)
-        setTimeout(() => { setOverlayMarker({ square: to, type: 'correct' }); setMarkers([{ square: to, type: 'correct' }]); }, 800);
-        setTimeout(() => setMarkers([]), 1400);
+        setTimeout(() => { setOverlayMarker({ square: to, type: 'correct' }); setMarkers([{ square: to, type: 'correct' }]); }, 250);
+        setTimeout(() => setMarkers([]), 500);
         setTimeout(() => {
             const playerFen = updateFenWithMove(gameState.fen, from, to);
             const playerMoves = [...gameState.moves, `${from}${to}`];
@@ -237,9 +237,9 @@ export default function ChessPuzzles() {
               setOpponentAnim(null);
               setAnimProgress(false);
               setWaitingForOpponent(false);
-              }, 100);
-              }, 900);
-            }, 200);
+              }, 60);
+              }, 300);
+            }, 120);
         } else {
             const solveTime = startTime ? Math.floor((Date.now() - startTime.getTime()) / 1000) : 0;
             submitSolutionMutation.mutate({ solved: true, solveTime, attempts: 1 });
@@ -248,7 +248,7 @@ export default function ChessPuzzles() {
               setMarkers([]);
               setOverlayMarker(null);
               setGameState(prev => ({ ...prev, isComplete: true }));
-            }, 700);
+            }, 300);
         }
         }, 1250);
     } else {
@@ -258,8 +258,8 @@ export default function ChessPuzzles() {
         setAnimProgress(false);
         setTimeout(() => setAnimProgress(true), 50);
         // Show incorrect marker at the moment the animation ends (overlay and base)
-        setTimeout(() => { setOverlayMarker({ square: to, type: 'incorrect' }); setMarkers([{ square: to, type: 'incorrect' }]); }, 800);
-        setTimeout(() => setMarkers([]), 2000);
+        setTimeout(() => { setOverlayMarker({ square: to, type: 'incorrect' }); setMarkers([{ square: to, type: 'incorrect' }]); }, 250);
+        setTimeout(() => setMarkers([]), 700);
         setTimeout(() => {
           const newFen = updateFenWithMove(gameState.fen, from, to);
           const newMoves = [...gameState.moves, `${from}${to}`];
@@ -268,7 +268,7 @@ export default function ChessPuzzles() {
           setOpponentAnim(null);
           setAnimProgress(false);
           setOverlayMarker(null);
-        }, 1250);
+        }, 400);
     }
   };
 
@@ -310,8 +310,8 @@ export default function ChessPuzzles() {
             setOpponentAnim(null);
             setAnimProgress(false);
             setWaitingForOpponent(false);
-          }, 650);
-        }, 150);
+          }, 300);
+        }, 100);
       } else {
         const solveTime = startTime ? Math.floor((Date.now() - startTime.getTime()) / 1000) : 0;
         submitSolutionMutation.mutate({ solved: true, solveTime, attempts: 1 });
@@ -319,7 +319,7 @@ export default function ChessPuzzles() {
           setMarkers([]);
           setOverlayMarker(null);
           setGameState(prev => ({ ...prev, isComplete: true }));
-        }, 500);
+        }, 300);
       }
     } else {
       const newFen = updateFenWithMove(gameState.fen, from, to);
@@ -328,7 +328,7 @@ export default function ChessPuzzles() {
       setLastMoveWasIncorrect(true);
       setGameState(prev => ({ ...prev, fen: newFen, moves: newMoves, isComplete: false }));
     }
-    setTimeout(() => setHighlightedSquares([]), 500);
+    setTimeout(() => setHighlightedSquares([]), 300);
   };
 
   const handleBack = () => {
@@ -377,7 +377,7 @@ export default function ChessPuzzles() {
       setWaitingForOpponent(false);
       setOpponentAnim(null);
       setAnimProgress(false);
-    }, 900);
+    }, 300);
     setIsAtStartPosition(false);
   };
   
@@ -558,7 +558,7 @@ export default function ChessPuzzles() {
                           width: cellInt,
                           height: cellInt,
                           transform: animProgress ? `translate(${dx}px, ${dy}px)` : 'translate(0px, 0px)',
-                          transition: 'transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)',
+                          transition: 'transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
                         }}
                       >
                         <span
