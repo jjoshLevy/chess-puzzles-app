@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, Lightbulb, Eye, RotateCcw, Undo } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
@@ -77,25 +77,49 @@ export default function ChessPuzzles() {
   const [isAtStartPosition, setIsAtStartPosition] = useState(false);
   const [lastMoveWasIncorrect, setLastMoveWasIncorrect] = useState(false);
   const [filters, setFilters] = useState<Filters>({ difficulties: [], themes: [] });
-  const [puzzleCounter, setPuzzleCounter] = useState(1);
+  const [history, setHistory] = useState<Puzzle[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
     const queryClient = useQueryClient();
 
-  const { data: puzzle, isLoading, isError } = useQuery<Puzzle>({
-    queryKey: ['puzzle', filters, puzzleCounter],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (filters.difficulties.length > 0) { params.append('difficulties', filters.difficulties.join(',')); }
-      if (filters.themes.length > 0) { params.append('themes', filters.themes.join(',')); }
-      const response = await fetch(`/api/puzzles?${params.toString()}`);
+  const buildQueryString = (f: Filters) => {
+    const params = new URLSearchParams();
+    if (f.difficulties.length > 0) params.append('difficulties', f.difficulties.join(','));
+    if (f.themes.length > 0) params.append('themes', f.themes.join(','));
+    return params.toString();
+  };
+
+  const loadNewPuzzle = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const qs = buildQueryString(filters);
+      const response = await fetch(`/api/puzzles?${qs}`);
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch puzzle');
+        const err = await response.json().catch(() => ({ error: 'Failed to fetch puzzle' }));
+        throw new Error(err.error || 'Failed to fetch puzzle');
       }
-      return response.json();
-    },
-    refetchOnWindowFocus: false, retry: false
-  });
+      const p: Puzzle = await response.json();
+      setHistory(prev => [...prev.slice(0, historyIndex + 1), p]);
+      setHistoryIndex(prev => prev + 1);
+      setPuzzle(p);
+    } catch (e: any) {
+      setError(e.message || 'Error fetching puzzle');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setHistory([]);
+    setHistoryIndex(-1);
+    setPuzzle(null);
+    loadNewPuzzle();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   const submitSolutionMutation = useMutation({
     mutationFn: async (data: { solved: boolean; solveTime: number; attempts: number }) => {
@@ -125,7 +149,7 @@ export default function ChessPuzzles() {
         setOpponentAnim({ from: opponentFrom, to: opponentTo });
         setHighlightedSquares([opponentFrom, opponentTo]);
         setAnimProgress(false);
-        setTimeout(() => setAnimProgress(true), 50);
+        setTimeout(() => setAnimProgress(true), 20);
         setTimeout(() => {
           const puzzleStartFen = updateFenWithMove(currentPuzzle.FEN, opponentFrom, opponentTo);
           setGameState({ fen: puzzleStartFen, moves: [opponentFirstMove], isComplete: false, showSolution: false, feedback: { type: 'hint', message: 'Your turn to move!' } });
@@ -133,12 +157,12 @@ export default function ChessPuzzles() {
           setOpponentAnim(null);
           setAnimProgress(false);
           setStartTime(new Date());
-        }, 300);
+        }, 150);
     }, 300);
   };
 
   useEffect(() => {
-    startPuzzle(puzzle as Puzzle);
+    if (puzzle) startPuzzle(puzzle as Puzzle);
   }, [puzzle]);
 
   // Keyboard navigation with arrow keys for back/forward
@@ -226,7 +250,7 @@ export default function ChessPuzzles() {
               setHighlightedSquares([opponentFrom, opponentTo]);
               setAnimProgress(false);
               // Kick off the CSS transition on the next tick
-              setTimeout(() => setAnimProgress(true), 50);
+              setTimeout(() => setAnimProgress(true), 20);
               // After the animation duration, apply the move and clear animation state
               setTimeout(() => {
               const finalFen = updateFenWithMove(playerFen, opponentFrom, opponentTo);
@@ -238,8 +262,8 @@ export default function ChessPuzzles() {
               setAnimProgress(false);
               setWaitingForOpponent(false);
               }, 60);
-              }, 300);
-            }, 120);
+              }, 180);
+            }, 20);
         } else {
             const solveTime = startTime ? Math.floor((Date.now() - startTime.getTime()) / 1000) : 0;
             submitSolutionMutation.mutate({ solved: true, solveTime, attempts: 1 });
@@ -302,7 +326,7 @@ export default function ChessPuzzles() {
           setOpponentAnim({ from: opponentFrom, to: opponentTo });
           setHighlightedSquares([opponentFrom, opponentTo]);
           setAnimProgress(false);
-          setTimeout(() => setAnimProgress(true), 50);
+          setTimeout(() => setAnimProgress(true), 20);
           setTimeout(() => {
             const finalFen = updateFenWithMove(playerFen, opponentFrom, opponentTo);
             const finalMoves = [...playerMoves, `${opponentFrom}${opponentTo}`];
@@ -310,8 +334,8 @@ export default function ChessPuzzles() {
             setOpponentAnim(null);
             setAnimProgress(false);
             setWaitingForOpponent(false);
-          }, 300);
-        }, 100);
+          }, 180);
+        }, 20);
       } else {
         const solveTime = startTime ? Math.floor((Date.now() - startTime.getTime()) / 1000) : 0;
         submitSolutionMutation.mutate({ solved: true, solveTime, attempts: 1 });
@@ -370,14 +394,14 @@ export default function ChessPuzzles() {
     setOpponentAnim({ from: opponentFrom, to: opponentTo });
     setHighlightedSquares([opponentFrom, opponentTo]);
     setAnimProgress(false);
-    setTimeout(() => setAnimProgress(true), 50);
+    setTimeout(() => setAnimProgress(true), 20);
     setTimeout(() => {
       const puzzleStartFen = updateFenWithMove(puzzle.FEN, opponentFrom, opponentTo);
       setGameState({ fen: puzzleStartFen, moves: [opponentFirstMove], isComplete: false, showSolution: false, feedback: { type: 'hint', message: 'Your turn to move!' } });
       setWaitingForOpponent(false);
       setOpponentAnim(null);
       setAnimProgress(false);
-    }, 300);
+    }, 180);
     setIsAtStartPosition(false);
   };
   
@@ -404,9 +428,23 @@ export default function ChessPuzzles() {
 
   const handleReset = () => { if (puzzle) { startPuzzle(puzzle); } };
   
-  const handleNextPuzzle = () => { setPuzzleCounter(prev => prev + 1); };
-  const handlePreviousPuzzle = () => { setPuzzleCounter(prev => prev > 1 ? prev - 1 : 1); };
-  const handleFiltersApply = (newFilters: Filters) => { setPuzzleCounter(1); setFilters(newFilters); };
+  const handleNextPuzzle = () => {
+    if (historyIndex < history.length - 1) {
+      const p = history[historyIndex + 1];
+      setHistoryIndex(historyIndex + 1);
+      setPuzzle(p);
+    } else {
+      loadNewPuzzle();
+    }
+  };
+  const handlePreviousPuzzle = () => {
+    if (historyIndex > 0) {
+      const p = history[historyIndex - 1];
+      setHistoryIndex(historyIndex - 1);
+      setPuzzle(p);
+    }
+  };
+  const handleFiltersApply = (newFilters: Filters) => { setFilters(newFilters); };
 
   if (isLoading) {
     return (
@@ -421,7 +459,7 @@ export default function ChessPuzzles() {
     );
   }
 
-  if (isError) {
+  if (error) {
     return (
       <div className="min-h-screen bg-gray-50">
         <AppHeader />
@@ -429,7 +467,7 @@ export default function ChessPuzzles() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-3 flex items-center justify-center h-96 text-center">
               <div className="text-lg text-red-600">
-                <p>Could not find a puzzle with those filters.</p>
+                <p>{error || 'Could not find a puzzle with those filters.'}</p>
                 <p className="text-sm text-gray-500 mt-2">Try a different filter combination.</p>
               </div>
             </div>
@@ -470,7 +508,7 @@ export default function ChessPuzzles() {
           <div className="lg:col-span-3">
             <PuzzleInfo
               puzzle={puzzleInfoProps as any}
-              puzzleNumber={puzzleCounter}
+              puzzleNumber={historyIndex + 1}
               onPrevious={handlePreviousPuzzle}
               onNext={handleNextPuzzle}
               onBookmark={() => {}}
@@ -558,7 +596,7 @@ export default function ChessPuzzles() {
                           width: cellInt,
                           height: cellInt,
                           transform: animProgress ? `translate(${dx}px, ${dy}px)` : 'translate(0px, 0px)',
-                          transition: 'transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+                          transition: 'transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
                         }}
                       >
                         <span
