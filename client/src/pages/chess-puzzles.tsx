@@ -274,7 +274,7 @@ export default function ChessPuzzles() {
               setGameState(prev => ({ ...prev, isComplete: true }));
             }, 300);
         }
-        }, 1250);
+        }, 700);
     } else {
         setLastMoveWasIncorrect(true);
         // Animate player's incorrect move, then apply
@@ -335,7 +335,7 @@ export default function ChessPuzzles() {
             setAnimProgress(false);
             setWaitingForOpponent(false);
           }, 180);
-        }, 20);
+        }, 350);
       } else {
         const solveTime = startTime ? Math.floor((Date.now() - startTime.getTime()) / 1000) : 0;
         submitSolutionMutation.mutate({ solved: true, solveTime, attempts: 1 });

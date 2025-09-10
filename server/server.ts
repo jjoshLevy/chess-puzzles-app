@@ -10,6 +10,32 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors());
 app.use(express.json());
+  
+// Ensure required tables exist (SQLite)
+try {
+  // UserRating table to store current user rating
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS UserRating (
+      userId TEXT PRIMARY KEY,
+      rating INTEGER DEFAULT 1500
+    );
+  `);
+
+  // SolveHistory table to record solve events with timestamps
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS SolveHistory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId TEXT NOT NULL,
+      puzzleId TEXT NOT NULL,
+      solved INTEGER NOT NULL,
+      solveTime INTEGER,
+      attempts INTEGER DEFAULT 1,
+      solvedAt TEXT DEFAULT (datetime('now'))
+    );
+  `);
+} catch (e) {
+  console.error('Failed to ensure required tables exist:', e);
+}
 
 const clientDistPath = path.resolve(__dirname, '../client/dist');
 app.use(express.static(clientDistPath));
@@ -62,7 +88,7 @@ app.get('/api/puzzles', (req, res) => {
 
 // Endpoint to update user rating after solving a puzzle
 app.post('/api/puzzles/:id/solve', (req, res) => {
-  const { userId = "default", solved } = req.body;
+  const { userId = "default", solved, solveTime, attempts } = req.body;
   const puzzleId = req.params.id;
 
   // Get puzzle difficulty (rating)
@@ -85,6 +111,15 @@ app.post('/api/puzzles/:id/solve', (req, res) => {
 
   db.prepare("UPDATE UserRating SET rating = ? WHERE userId = ?").run(newRating, userId);
 
+  // Record solve event in history
+  try {
+    db.prepare(
+      "INSERT INTO SolveHistory (userId, puzzleId, solved, solveTime, attempts) VALUES (?, ?, ?, ?, ?)"
+    ).run(userId, puzzleId, solved ? 1 : 0, solveTime ?? null, attempts ?? 1);
+  } catch (e) {
+    console.error('Failed to record solve history:', e);
+  }
+
   res.json({ newRating });
 });
 
@@ -98,6 +133,79 @@ app.get('/api/user/rating', (req, res) => {
   }
   res.setHeader('Cache-control', 'no-store');
   res.json({ rating: user.rating });
+});
+
+// Aggregate user statistics
+app.get('/api/stats', (req, res) => {
+  const userId = "default";
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    // Ensure user rating exists
+    let user = db.prepare("SELECT rating FROM UserRating WHERE userId = ?").get(userId);
+    if (!user) {
+      db.prepare("INSERT INTO UserRating (userId, rating) VALUES (?, 1500)").run(userId);
+      user = { rating: 1500 } as any;
+    }
+
+    // Total solved
+    const totalSolvedRow = db.prepare(
+      "SELECT COUNT(*) AS cnt FROM SolveHistory WHERE userId = ? AND solved = 1"
+    ).get(userId) as any;
+    const totalSolved = totalSolvedRow?.cnt ?? 0;
+
+    // Average solve time (in seconds)
+    const times = db.prepare(
+      "SELECT solveTime FROM SolveHistory WHERE userId = ? AND solved = 1 AND solveTime IS NOT NULL"
+    ).all(userId) as Array<{ solveTime: number }>;
+    let averageSolveTime: number | null = null;
+    if (times.length > 0) {
+      const sum = times.reduce((s, r) => s + (Number(r.solveTime) || 0), 0);
+      averageSolveTime = Math.round(sum / times.length);
+    }
+
+    // Solves by hour (0-23)
+    const hourRows = db.prepare(
+      "SELECT strftime('%H', solvedAt) AS hour, COUNT(*) AS cnt FROM SolveHistory WHERE userId = ? AND solved = 1 GROUP BY hour"
+    ).all(userId) as Array<{ hour: string; cnt: number }>;
+    const byHourMap = new Map<number, number>();
+    for (let h = 0; h < 24; h++) byHourMap.set(h, 0);
+    for (const r of hourRows) {
+      const h = Number(r.hour);
+      if (!Number.isNaN(h)) byHourMap.set(h, (byHourMap.get(h) || 0) + (Number(r.cnt) || 0));
+    }
+    const solvesByHour = Array.from(byHourMap.entries()).map(([hour, count]) => ({ hour, count }));
+    const mostActiveHour = solvesByHour.reduce((a, b) => (b.count > a.count ? b : a), { hour: 0, count: 0 });
+
+    // Best theme and top themes
+    const solvedPuzzles = db.prepare(
+      "SELECT puzzleId FROM SolveHistory WHERE userId = ? AND solved = 1"
+    ).all(userId) as Array<{ puzzleId: string }>;
+    const themeCounts: Record<string, number> = {};
+    for (const r of solvedPuzzles) {
+      const p = db.prepare("SELECT Themes FROM Puzzle WHERE PuzzleId = ?").get(r.puzzleId) as any;
+      if (!p || !p.Themes) continue;
+      const tokens = String(p.Themes).split(/[ ,;]+/).filter(Boolean);
+      for (const t of tokens) themeCounts[t] = (themeCounts[t] || 0) + 1;
+    }
+    const topThemes = Object.entries(themeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([theme, count]) => ({ theme, count }));
+    const bestTheme = topThemes.length > 0 ? topThemes[0] : null;
+
+    res.json({
+      rating: user?.rating ?? 1500,
+      totalSolved,
+      averageSolveTime,
+      solvesByHour,
+      mostActiveHour,
+      bestTheme,
+      topThemes,
+    });
+  } catch (err: any) {
+    console.error('Failed to compute stats:', err);
+    res.status(500).json({ error: 'Failed to compute stats' });
+  }
 });
 
 app.get('*', (req, res) => {
