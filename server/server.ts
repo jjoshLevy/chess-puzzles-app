@@ -3,16 +3,33 @@ import { db } from './db';
 import path from 'path';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
+import cookieParser from 'cookie-parser';
+import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+dotenv.config();
+
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
   
 // Ensure required tables exist (SQLite)
 try {
+  // Users table to store credentials
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS Users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      passwordHash TEXT NOT NULL,
+      createdAt TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // UserRating table to store current user rating
   db.exec(`
     CREATE TABLE IF NOT EXISTS UserRating (
@@ -39,6 +56,74 @@ try {
 
 const clientDistPath = path.resolve(__dirname, '../client/dist');
 app.use(express.static(clientDistPath));
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+function signToken(uid: string) {
+  return jwt.sign({ uid }, JWT_SECRET, { expiresIn: '30d' });
+}
+function setAuthCookie(res: express.Response, token: string) {
+  res.cookie('auth_token', token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 30 * 24 * 3600 * 1000,
+  });
+}
+
+// Attach userId from auth cookie if present
+app.use((req, _res, next) => {
+  const token = (req as any).cookies?.auth_token;
+  if (token) {
+    try {
+      const payload = jwt.verify(token, JWT_SECRET) as any;
+      (req as any).userId = String(payload.uid);
+    } catch {}
+  }
+  next();
+});
+
+// Auth endpoints
+app.post('/api/auth/register', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password || String(username).trim().length < 3 || String(password).length < 6) {
+    return res.status(400).json({ error: 'Invalid username or password' });
+  }
+  const uname = String(username).trim();
+  const existing = db.prepare("SELECT id FROM Users WHERE username = ?").get(uname);
+  if (existing) return res.status(409).json({ error: 'Username already taken' });
+  const hash = bcrypt.hashSync(String(password), 10);
+  const info = db.prepare("INSERT INTO Users (username, passwordHash) VALUES (?, ?)").run(uname, hash);
+  const id = String(info.lastInsertRowid);
+  const token = signToken(id);
+  setAuthCookie(res, token);
+  return res.json({ id, username: uname });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
+  const user = db.prepare("SELECT id, username, passwordHash FROM Users WHERE username = ?").get(String(username).trim()) as any;
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  const ok = bcrypt.compareSync(String(password), user.passwordHash);
+  if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+  const token = signToken(String(user.id));
+  setAuthCookie(res, token);
+  return res.json({ id: String(user.id), username: user.username });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('auth_token', { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+  res.status(204).end();
+});
+
+app.get('/api/auth/user', (req, res) => {
+  const uid = (req as any).userId;
+  if (!uid) return res.sendStatus(401);
+  const user = db.prepare("SELECT id, username FROM Users WHERE id = ?").get(uid) as any;
+  if (!user) return res.sendStatus(401);
+  res.json({ id: String(user.id), username: user.username });
+});
 
 // Improved /api/puzzles endpoint with filters support
 app.get('/api/puzzles', (req, res) => {
@@ -88,7 +173,9 @@ app.get('/api/puzzles', (req, res) => {
 
 // Endpoint to update user rating after solving a puzzle
 app.post('/api/puzzles/:id/solve', (req, res) => {
-  const { userId = "default", solved, solveTime, attempts } = req.body;
+  const { solved, solveTime, attempts } = req.body;
+  const userId = (req as any).userId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   const puzzleId = req.params.id;
 
   // Get puzzle difficulty (rating)
@@ -125,7 +212,8 @@ app.post('/api/puzzles/:id/solve', (req, res) => {
 
 // Endpoint for user rating (returns real rating)
 app.get('/api/user/rating', (req, res) => {
-  const userId = "default";
+  const userId = (req as any).userId;
+  if (!userId) return res.sendStatus(401);
   let user = db.prepare("SELECT rating FROM UserRating WHERE userId = ?").get(userId);
   if (!user) {
     db.prepare("INSERT INTO UserRating (userId, rating) VALUES (?, 1500)").run(userId);
@@ -137,7 +225,8 @@ app.get('/api/user/rating', (req, res) => {
 
 // Aggregate user statistics
 app.get('/api/stats', (req, res) => {
-  const userId = "default";
+  const userId = (req as any).userId;
+  if (!userId) return res.sendStatus(401);
   res.setHeader('Cache-Control', 'no-store');
   try {
     // Ensure user rating exists

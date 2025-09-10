@@ -1,8 +1,17 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { User } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { queryClient } from "@/lib/queryClient";
 
 export function AppHeader() {
+  const { user } = useAuth();
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/user/rating"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+  };
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -48,10 +57,20 @@ export function AppHeader() {
             >
               Leaderboard
             </Link>
-            <Button className="bg-primary text-white hover:bg-blue-600">
-              <User className="w-4 h-4 mr-2" />
-              Profile
-            </Button>
+            {!user ? (
+              <div className="flex items-center gap-2">
+                <Link href="/login" className="text-gray-700 hover:text-primary transition-colors">Login</Link>
+                <Link href="/register" className="text-gray-700 hover:text-primary transition-colors">Register</Link>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="text-gray-700">Hello, {user.username}</span>
+                <Button className="bg-primary text-white hover:bg-blue-600" onClick={logout}>
+                  <User className="w-4 h-4 mr-2" />
+                  Logout
+                </Button>
+              </div>
+            )}
           </nav>
 
           <button className="md:hidden p-2 text-gray-600">

@@ -7,7 +7,7 @@ export function useAuth() {
   });
 
   return {
-    user,
+    user: user as { id: string; username: string } | null,
     isLoading,
     isAuthenticated: !!user,
   };
